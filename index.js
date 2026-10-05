@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.8.1
+ * Maya World/User Agent Runtime v0.8.2
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -715,8 +715,11 @@ async function run() {
 
     const fingerprint = hash(current.index + "|" + current.text);
     if (s.runtime.last_user_hash === fingerprint && s.runtime.last_user_index === current.index) {
-        log("duplicate turn ignored", fingerprint);
-        return false;
+        if (!needsOpeningKnowledge) {
+            log("duplicate turn ignored", fingerprint);
+            return false;
+        }
+        log("duplicate turn allowed for one-time opening knowledge bootstrap");
     }
 
     running = true;
@@ -1327,7 +1330,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.8.1 loaded");
+    console.log("[MWU] v0.8.2 loaded");
 }
 
 setTimeout(init, 0);
