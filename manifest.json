@@ -6,5 +6,10 @@
   "js": "index.js",
   "css": "style.css",
   "author": "OpenAI / user-custom",
-  "version": "0.10.3"
+  "version": "0.10.4",
+  "homePage": "https://github.com/meowngu87-debug/tt",
+  "auto_update": true,
+  "hooks": {
+    "activate": "init"
+  }
 }
