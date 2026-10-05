@@ -304,7 +304,7 @@ async function requestViaProfile(profileId, prompt, maxTokens) {
                 stream: false,
                 signal: null,
                 extractData: true,
-                includePreset: true,
+                includePreset: false,
                 includeInstruct: true,
             },
         );
@@ -329,9 +329,9 @@ async function quiet(prompt) {
     const profileId = selectedProfile("world");
     if (profileId) return await requestViaProfile(profileId, prompt, 2200);
 
-    const f = ctx()?.generateQuietPrompt || window.generateQuietPrompt;
-    if (typeof f !== "function") throw Error("generateQuietPrompt unavailable");
-    return await f({ quietPrompt: prompt });
+    const f = ctx()?.generateRaw || window.generateRaw;
+    if (typeof f !== "function") throw Error("generateRaw unavailable");
+    return await f({ prompt });
 }
 
 function refreshProfileDropdowns() {
@@ -628,10 +628,13 @@ function inject(v) {
     const f = c?.setExtensionPrompt || window.setExtensionPrompt;
     if (typeof f !== "function") return;
 
-    const types = c?.extension_prompt_types || window.extension_prompt_types || { IN_PROMPT: 0 };
+    const types = c?.extension_prompt_types || window.extension_prompt_types || { BEFORE_PROMPT: 2 };
     const roles = c?.extension_prompt_roles || window.extension_prompt_roles || { SYSTEM: 0 };
 
-    f("MAYA_WORLD_USER_RUNTIME", v || "", types.IN_PROMPT, +settings().injectDepth || 2, false, roles.SYSTEM);
+    // Put runtime context before the main prompt/story string so the existing
+    // preset prompt stack (thinking chain, word count, output format, etc.)
+    // remains the final authority.
+    f("MAYA_WORLD_USER_RUNTIME", v || "", types.BEFORE_PROMPT ?? 2, 0, false, roles.SYSTEM);
 }
 
 function clear() { inject(""); }
@@ -706,9 +709,13 @@ async function run() {
             + "- Never simulate NPCs, world events, hidden facts, outcomes, or consequences.\n"
             + "- If the input is ambiguous because the perception window lacks enough information, preserve the ambiguity instead of inventing details.";
 
-        const ur = json(await raw(up));
+        globalThis.MayaWorldAgent_auxiliary = true;
+        let ur;
+        let wr;
+        try {
+            ur = json(await raw(up));
 
-        const wp =
+            const wp =
             "You are the WORLD ENGINE of a persistent roleplay simulation.\n\n"
             + "Advance the world between user turns when causally appropriate. You own:\n"
             + "- time and world state;\n"
@@ -758,7 +765,10 @@ async function run() {
             + "- Continue ongoing off-screen events naturally without narrating them as omniscient prose to the User.\n"
             + "- Do not decide the preset's final D100 result here. Prepare world state and consequences; let the existing preset resolve rolls in the main generation.";
 
-        const wr = normWorld(await quiet(wp));
+            wr = normWorld(await quiet(wp));
+        } finally {
+            globalThis.MayaWorldAgent_auxiliary = false;
+        }
         merge(s, wr);
 
         s.runtime.last_user_hash = fingerprint;
@@ -1190,14 +1200,6 @@ function ui() {
     setInterval(refreshStatus, 1500);
 }
 
-globalThis.MayaWorldAgent_interceptGeneration = async function (chat, contextSize, abort, type) {
-    const s = settings();
-    if (!s.enabled || !s.autoRun || running) return chat;
-    if (type && !["normal", "impersonate"].includes(type)) return chat;
-    await run();
-    return chat;
-};
-
 function init() {
     const c = ctx();
     if (!c) {
@@ -1219,12 +1221,21 @@ function init() {
     if (c.eventSource && c.event_types) {
         const e = c.eventSource;
         const t2 = c.event_types;
+
+        // Build USER/WORLD state before ST assembles the final generation prompt.
+        e.on(t2.GENERATION_AFTER_COMMANDS, async () => {
+            if (globalThis.MayaWorldAgent_auxiliary) return;
+            const s = settings();
+            if (!s.enabled || !s.autoRun || running) return;
+            await run();
+        });
+
         e.on(t2.GENERATION_ENDED, clear);
         e.on(t2.GENERATION_STOPPED, clear);
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.5.1 loaded");
+    console.log("[MWU] v0.6.0 loaded");
 }
 
 setTimeout(init, 0);
