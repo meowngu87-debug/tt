@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.10.1
+ * Maya World/User Agent Runtime v0.10.2
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -816,6 +816,20 @@ async function run(options = {}) {
 
             // Commit USER-owned memory before the WORLD request. A WORLD
             // failure must never roll back facts successfully extracted here.
+            s.knowledge.user = uniq([
+                ...(s.knowledge?.user || []),
+                ...userFacts,
+            ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
+
+            s.user_state = s.user_state || { notes: [] };
+            s.user_state.notes = uniq([
+                ...(s.user_state.notes || []),
+                ...userStateNotes,
+            ]).slice(-40);
+
+            s.perception.known_facts = uniq(s.knowledge.user)
+                .slice(-Math.max(20, Number(settings().maxFacts) || 120));
+
             s.runtime.save = "user-memory";
             saveState(s);
 
@@ -916,9 +930,9 @@ async function run(options = {}) {
         s.runtime.last_user_hash = fingerprint;
         s.runtime.last_user_index = current.index;
 
-        saveState(s);
         s.runtime.save = "ok";
         s.runtime.last_stage = "inject";
+        saveState(s);
         inject(runtimePrompt(ur, s));
         s.runtime.inject = "pending";
 
@@ -926,6 +940,7 @@ async function run(options = {}) {
             turn: s.turn,
             pov: s.pov,
             visibleEntities: s.perception.visible_entities.length,
+            knownFacts: s.knowledge.user.length,
             hidden: s.background_ledger.filter(x => x.status === "hidden").length,
         });
 
@@ -1470,7 +1485,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.10.1 loaded");
+    console.log("[MWU] v0.10.2 loaded");
 }
 
 setTimeout(init, 0);
