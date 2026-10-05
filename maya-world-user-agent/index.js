@@ -732,36 +732,139 @@ function reset() {
 
 function ui() {
     if (uiReady) return;
-    const host = document.querySelector("#extensions_settings2") || document.querySelector("#extensions_settings");
+
+    const host =
+        document.querySelector("#extensions_settings2")
+        || document.querySelector("#extensions_settings");
+
     if (!host) return;
     uiReady = true;
 
     const d = document.createElement("div");
     d.className = "mwu-settings inline-drawer";
-    d.innerHTML =
-        '<div class="inline-drawer-toggle inline-drawer-header"><b>Maya World/User Agent Runtime</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>'
-        + '<div class="inline-drawer-content">'
-        + '<label><input id="mwu_enabled" type="checkbox"> Enable runtime</label>'
-        + '<label><input id="mwu_auto" type="checkbox"> Run automatically before normal generation</label>'
-        + '<label>History <input id="mwu_history" type="number" min="4" max="80"></label>'
-        + '<label>Ledger max <input id="mwu_ledger" type="number" min="10" max="200"></label>'
-        + '<label>NPC max <input id="mwu_npcs" type="number" min="10" max="200"></label>'
-        + '<label>Known facts max <input id="mwu_facts" type="number" min="20" max="500"></label>'
-        + '<label>Visible entities max <input id="mwu_entities" type="number" min="2" max="50"></label>'
-        + '<label>Visible context max <input id="mwu_visible" type="number" min="4" max="40"></label>'
-        + '<label>Injection depth <input id="mwu_depth" type="number" min="0" max="20"></label>'
-        + '<label><input id="mwu_debug" type="checkbox"> Debug console</label>'
-        + '<div class="mwu-buttons"><button id="mwu_run" class="menu_button">Run agents now</button><button id="mwu_reset" class="menu_button">Reset current chat state</button></div>'
-        + '<pre id="mwu_status"></pre>'
-        + '</div>';
+    d.innerHTML = `
+        <div class="inline-drawer-toggle inline-drawer-header mwu-header">
+            <div class="mwu-title-wrap">
+                <div class="mwu-title">Maya World/User Runtime</div>
+                <div class="mwu-subtitle">WORLD → PERCEPTION → USER • persistent simulation layer</div>
+            </div>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+
+        <div class="inline-drawer-content mwu-panel">
+            <div class="mwu-hero">
+                <div>
+                    <div class="mwu-kicker">RUNTIME CONTROL</div>
+                    <div class="mwu-hero-title">Thế giới sống, ký ức phân tầng</div>
+                    <div class="mwu-hero-copy">User chỉ nhận phần thế giới có thể trải nghiệm; WORLD giữ state ẩn và nền sự kiện.</div>
+                </div>
+                <div id="mwu_runtime_badge" class="mwu-badge mwu-badge-off">OFF</div>
+            </div>
+
+            <div class="mwu-stat-grid">
+                <div class="mwu-stat"><span>Turn</span><b id="mwu_stat_turn">0</b></div>
+                <div class="mwu-stat"><span>POV</span><b id="mwu_stat_pov">LOCAL</b></div>
+                <div class="mwu-stat"><span>NPC</span><b id="mwu_stat_npcs">0</b></div>
+                <div class="mwu-stat"><span>Live Events</span><b id="mwu_stat_live">0</b></div>
+                <div class="mwu-stat"><span>Achievements</span><b id="mwu_stat_achievements">0</b></div>
+            </div>
+
+            <div class="mwu-section">
+                <div class="mwu-section-head">
+                    <span>⚙</span>
+                    <div><b>Hoạt động</b><small>Điều khiển runtime</small></div>
+                </div>
+                <label class="mwu-switch-row">
+                    <span><span class="mwu-label">Enable runtime</span><small>Bật lớp WORLD/USER runtime cho chat hiện tại.</small></span>
+                    <input id="mwu_enabled" type="checkbox"><span class="mwu-switch"></span>
+                </label>
+                <label class="mwu-switch-row">
+                    <span><span class="mwu-label">Auto run</span><small>Chạy USER + WORLD trước mỗi lần generate bình thường.</small></span>
+                    <input id="mwu_auto" type="checkbox"><span class="mwu-switch"></span>
+                </label>
+            </div>
+
+            <div class="mwu-section">
+                <div class="mwu-section-head">
+                    <span>◫</span>
+                    <div><b>Bộ nhớ thế giới</b><small>State sống và lịch sử đã hoàn tất</small></div>
+                </div>
+                <div class="mwu-field-grid">
+                    <label class="mwu-field">
+                        <span>History</span><input id="mwu_history" type="number" min="4" max="80"><small>Số message gần nhất đưa cho WORLD.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>Live ledger</span><input id="mwu_ledger" type="number" min="10" max="200"><small>Số sự kiện nền đang sống tối đa.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>Achievements</span><input id="mwu_achievements" type="number" min="20" max="500"><small>Mốc lịch sử đã giải quyết.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>NPC max</span><input id="mwu_npcs" type="number" min="10" max="200"><small>Giới hạn NPC được lưu state.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>Known facts</span><input id="mwu_facts" type="number" min="20" max="500"><small>Kiến thức User đã hợp lệ biết.</small>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mwu-section">
+                <div class="mwu-section-head">
+                    <span>◉</span>
+                    <div><b>Perception</b><small>Những gì User thực sự được trải nghiệm</small></div>
+                </div>
+                <div class="mwu-field-grid">
+                    <label class="mwu-field">
+                        <span>Visible entities</span><input id="mwu_entities" type="number" min="2" max="50"><small>NPC/đối tượng hiện hữu trong tầm nhận biết.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>Visible context</span><input id="mwu_visible" type="number" min="4" max="40"><small>Chi tiết môi trường/nhận thức được giữ lại.</small>
+                    </label>
+                    <label class="mwu-field">
+                        <span>Injection depth</span><input id="mwu_depth" type="number" min="0" max="20"><small>Vị trí context Maya trong prompt chính. 2 là mức mặc định.</small>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mwu-section mwu-section-tools">
+                <div class="mwu-section-head">
+                    <span>⚡</span>
+                    <div><b>Thao tác</b><small>Chỉ dùng khi cần can thiệp thủ công</small></div>
+                </div>
+                <div class="mwu-buttons">
+                    <button id="mwu_run" class="menu_button mwu-primary"><i class="fa-solid fa-play"></i> Run agents now</button>
+                    <button id="mwu_reset" class="menu_button mwu-danger"><i class="fa-solid fa-rotate-left"></i> Reset current chat state</button>
+                </div>
+                <div class="mwu-note">Reset chỉ xóa state runtime của chat; không xóa lịch sử tin nhắn.</div>
+            </div>
+
+            <div class="mwu-section mwu-debug-section">
+                <div class="mwu-section-head">
+                    <span>⌁</span>
+                    <div><b>Developer</b><small>Chỉ bật khi đang kiểm tra lỗi</small></div>
+                </div>
+                <label class="mwu-switch-row compact">
+                    <span><span class="mwu-label">Debug console</span><small>Ghi log runtime vào DevTools Console.</small></span>
+                    <input id="mwu_debug" type="checkbox"><span class="mwu-switch"></span>
+                </label>
+            </div>
+
+            <div class="mwu-live-status">
+                <div class="mwu-live-dot"></div>
+                <pre id="mwu_status">Initializing…</pre>
+            </div>
+        </div>
+    `;
 
     host.appendChild(d);
 
     const s = settings();
+
     $("#mwu_enabled").prop("checked", s.enabled);
     $("#mwu_auto").prop("checked", s.autoRun);
     $("#mwu_history").val(s.historyMessages);
     $("#mwu_ledger").val(s.maxLedgerEntries);
+    $("#mwu_achievements").val(s.maxAchievements);
     $("#mwu_npcs").val(s.maxNpcs);
     $("#mwu_facts").val(s.maxFacts);
     $("#mwu_entities").val(s.maxVisibleEntities);
@@ -773,6 +876,7 @@ function ui() {
         $(id).on("change", function () {
             bag()[k] = cast(this.type === "checkbox" ? this.checked : this.value);
             ctx()?.saveSettingsDebounced?.();
+            refreshStatus();
         });
     }
 
@@ -780,6 +884,7 @@ function ui() {
     bind("#mwu_auto", "autoRun");
     bind("#mwu_history", "historyMessages", Number);
     bind("#mwu_ledger", "maxLedgerEntries", Number);
+    bind("#mwu_achievements", "maxAchievements", Number);
     bind("#mwu_npcs", "maxNpcs", Number);
     bind("#mwu_facts", "maxFacts", Number);
     bind("#mwu_entities", "maxVisibleEntities", Number);
@@ -787,23 +892,47 @@ function ui() {
     bind("#mwu_depth", "injectDepth", Number);
     bind("#mwu_debug", "debug");
 
-    $("#mwu_run").on("click", run);
-    $("#mwu_reset").on("click", reset);
-
-    setInterval(() => {
+    function refreshStatus() {
         const ss = state();
+        const enabled = settings().enabled;
+        const badge = $("#mwu_runtime_badge");
+        badge.text(enabled ? (running ? "RUNNING" : "ON") : "OFF");
+        badge.toggleClass("mwu-badge-off", !enabled && !running);
+        badge.toggleClass("mwu-badge-on", enabled && !running);
+        badge.toggleClass("mwu-badge-running", running);
+
+        $("#mwu_stat_turn").text(ss?.turn || 0);
+        $("#mwu_stat_pov").text(ss?.pov || "LOCAL");
+        $("#mwu_stat_npcs").text(Object.keys(ss?.npcs || {}).length);
+        $("#mwu_stat_live").text(ss?.background_ledger?.length || 0);
+        $("#mwu_stat_achievements").text(ss?.achievements?.length || 0);
+
         $("#mwu_status").text(
-            "enabled=" + settings().enabled
-            + ", auto=" + settings().autoRun
-            + ", turn=" + (ss?.turn || 0)
-            + ", pov=" + (ss?.pov || "LOCAL")
-            + ", visibleEntities=" + (ss?.perception?.visible_entities?.length || 0)
-            + ", npcs=" + Object.keys(ss?.npcs || {}).length
-            + ", events=" + Object.keys(ss?.events || {}).length
-            + ", hidden=" + (ss?.background_ledger?.filter(x => x.status === "hidden").length || 0)
-            + ", running=" + running
+            "runtime=" + (enabled ? "enabled" : "disabled")
+            + " • auto=" + (settings().autoRun ? "on" : "off")
+            + " • turn=" + (ss?.turn || 0)
+            + " • pov=" + (ss?.pov || "LOCAL")
+            + " • live=" + (ss?.background_ledger?.length || 0)
+            + " • achievements=" + (ss?.achievements?.length || 0)
+            + " • running=" + running
         );
-    }, 1500);
+    }
+
+    $("#mwu_run").on("click", async function () {
+        $(this).prop("disabled", true);
+        try { await run(); } finally {
+            $(this).prop("disabled", false);
+            refreshStatus();
+        }
+    });
+
+    $("#mwu_reset").on("click", function () {
+        reset();
+        refreshStatus();
+    });
+
+    refreshStatus();
+    setInterval(refreshStatus, 1500);
 }
 
 globalThis.MayaWorldAgent_interceptGeneration = async function (chat, contextSize, abort, type) {
