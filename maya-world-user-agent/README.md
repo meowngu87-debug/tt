@@ -1,75 +1,187 @@
 # Maya World/User Agent Runtime
 
-Runtime layer for the Maya WORLD/USER architecture. The goal is not to become a general ST automation agent; the goal is to make persistent text-world simulation smoother and safer.
+Runtime layer for the Maya WORLD/USER architecture. The runtime is designed to make a persistent text-world operate smoothly without turning the USER layer into a second GM.
 
-## Core flow
+## Core architecture
 
-USER INPUT -> USER PROCESSOR -> USER_RESULT -> WORLD ENGINE -> persistent WORLD STATE -> reveal boundary -> MAIN NARRATIVE
+```
+WORLD_STATE
+   |
+   | perception / reveal boundary
+   v
+PERCEPTION_STATE
+   |
+   +---- Persona
+   +---- Actual User Input
+   |
+   v
+USER_PROCESSOR
+   |
+   v
+USER_RESULT
+   |
+   v
+WORLD_ENGINE
+   |
+   +---- hidden WORLD_STATE
+   +---- background ledger
+   +---- NPC state / knowledge
+   +---- time / events / consequences
+   |
+   v
+new PERCEPTION_STATE
+   |
+   v
+MAIN NARRATIVE
+```
 
-### USER layer
+The important firewall is:
 
-The User processor receives only the current real user input and the active user persona. It extracts what the user actually did, said, or clearly intended.
+```
+WORLD INTERNAL STATE  X->  USER PROCESSOR
+WORLD STATE            ->  PERCEPTION_STATE -> USER PROCESSOR
+```
 
-It must not invent new user decisions, dialogue, memories, motives, hidden emotions, actions not taken by the user, or NPC reactions.
+The User must not be isolated from the world. The User must only receive the part of the world that the User can actually experience or validly know.
 
-### WORLD layer
+## USER layer
 
-The World engine owns time and location, NPC state, NPC knowledge, NPC awareness and interest, relationships, active events, background events, consequences, LOCAL/GLOBAL simulation scope, and reveal channels.
+The USER processor receives exactly these sources:
 
-NPCs do not need a separate AI each. Important NPC state is persisted; lightweight NPCs can be represented by role, current state, knowledge and context.
+- active User Persona;
+- the current real User input;
+- the current User Perceived World.
 
-## Persistent state
+The User Perceived World can contain:
 
-State is stored per chat in chatMetadata:
+- current perceived time and location;
+- visible context;
+- visible entities and their observable state;
+- sensory information;
+- immediate consequences already experienced;
+- facts the User has legitimately learned;
+- recent valid reveals.
 
-- world
-- npcs
-- relationships
-- knowledge
-- events
-- background_ledger
-- reveals
-- runtime turn fingerprint
+The USER processor uses that information to resolve references and interpret the input. It must not invent:
 
-The background ledger is hidden state. It is not directly injected into the main narrative.
+- new User decisions;
+- new User dialogue;
+- hidden motives, memories or emotions;
+- NPC reactions;
+- world events;
+- outcomes or consequences.
 
-## Reveal boundary
+When information is genuinely ambiguous, the processor preserves the ambiguity instead of inventing an answer.
 
-Hidden information can reach the user only through a valid channel:
+## WORLD layer
 
-- witnessed
-- heard
-- reported
-- rumor
-- trace
-- consequence
-- justified inference
+The WORLD engine owns:
 
-GLOBAL simulation does not mean the User knows everything. NPC knowledge is local to each NPC and is not globally shared by default.
+- world time and world state;
+- NPC state, knowledge, awareness and interest;
+- relationships;
+- events and consequences;
+- background/off-screen activity;
+- LOCAL/GLOBAL simulation scope;
+- the reveal boundary;
+- construction of the next User Perceived World.
 
-## Continuity improvements in v0.2
+NPC knowledge remains local to each NPC. GLOBAL simulation does not mean the User or every NPC knows everything.
 
-- duplicate-turn protection prevents one user message from advancing the world twice;
-- structured persistent NPC, relationship, event and knowledge state;
-- bounded state size so long chats do not grow metadata without limit;
-- stable background-event IDs when the model omits an ID;
-- hidden/revealed background-event status;
-- LOCAL/GLOBAL POV state;
-- ongoing off-screen events can advance between user turns;
-- no forced drama when nothing meaningful changes;
-- existing D100, Action Roll, World Roll, dice veto, Character Autonomy and OCC rules remain authoritative;
-- auxiliary runtime failure clears its injection and allows normal ST generation to continue.
+Important NPCs are persisted in state. Lightweight NPCs can be represented by role, current state, knowledge and context; they do not require one separate AI each.
+
+## Perception boundary
+
+`PERCEPTION_STATE` is separate from hidden `WORLD_STATE`.
+
+Information enters the User side only through:
+
+- direct witnessing;
+- hearing;
+- report;
+- rumor;
+- trace/evidence;
+- consequence;
+- justified inference.
+
+The hidden background ledger is never directly injected into the main narrative.
+
+A background event may be stored as:
+
+```
+SIMULATED -> HIDDEN -> REVEALED -> RESOLVED
+```
+
+Main narrative remains a User perception window instead of omniscient narration.
+
+## Existing preset authority
+
+This extension does not replace the existing Maya preset systems.
+
+The preset remains authoritative for:
+
+- D100;
+- Action Roll;
+- World Roll;
+- dice veto and outcome interpretation;
+- Character Autonomy;
+- OCC protection;
+- prose/style/world rules.
+
+The auxiliary WORLD call prepares state and context. It is explicitly told not to secretly replace the preset's final D100 result.
+
+## Persistence
+
+State is stored per chat in `chatMetadata` under:
+
+`maya_world_user_agent_state`
+
+State includes:
+
+- `world`
+- `npcs`
+- `relationships`
+- `knowledge`
+- `events`
+- `background_ledger`
+- `reveals`
+- `perception`
+- `runtime`
+
+Long-running chats are bounded by configurable limits so metadata does not grow without limit.
+
+v0.3 also migrates the older v0.1/v0.2 state shape and preserves the old background ledger and array-style NPC/relationship updates when possible.
+
+## Continuity behavior
+
+The runtime:
+
+- prevents duplicate processing of the same user message;
+- advances ongoing off-screen activity between User turns;
+- keeps hidden background activity in state rather than prose;
+- preserves continuity when nothing meaningful changes;
+- keeps User knowledge separate from NPC/private knowledge;
+- provides a structured perception window for pronouns, locations, visible NPCs and immediate consequences;
+- seeds the new perception layer from the last already-visible assistant message when a chat is upgraded from an older state.
+
+The runtime does not currently tick the world while the chat is completely idle. World simulation advances when the User generation pipeline runs.
 
 ## Installation
 
-Install the extension through the SillyTavern third-party extension mechanism or place the folder under the ST third-party extensions directory, then reload ST.
+Install the extension through SillyTavern's third-party extension mechanism or place the folder under the ST third-party extensions directory, then reload ST.
 
-Enable: Maya World/User Runtime -> Enable runtime
+Enable:
 
-Keep Run automatically before normal generation enabled for normal use.
+`Maya World/User Agent Runtime -> Enable runtime`
 
-## Important limitation
+Keep:
 
-v0.2 still uses the currently selected SillyTavern connection/profile for the auxiliary User and World calls. The separation is a context/information firewall, not a separate-model architecture.
+`Run automatically before normal generation`
 
-The extension does not edit presets, MVU, Regex, scripts or other ST configuration. Those are deliberately outside its scope.
+enabled for normal use.
+
+## Current limitation
+
+The auxiliary User and World calls use the currently selected SillyTavern connection/profile. The separation is a context/information firewall, not a separate-model architecture.
+
+The extension does not edit presets, MVU, Regex, scripts or other ST configuration. Those remain outside this runtime layer.
