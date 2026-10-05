@@ -1,5 +1,5 @@
 /*
- * Maya World/User Agent Runtime v0.1.0
+ * Maya World/User Agent Runtime v0.2.0
  * Runtime/context firewall around the existing Maya D100 preset.
  */
 const MODULE="maya_world_user_agent", META_KEY="maya_world_user_agent_state";
@@ -120,7 +120,7 @@ function inject(v){
 function clear(){inject("")}
 function runtimePrompt(u,w){
  const visible=[...arr(w.visible_context),...arr(w.reveals).map(x=>"["+x.channel+"] "+x.text)].map(x=>str(x,1800)).filter(Boolean).slice(0,Number(settings().maxVisibleItems)||12);
- return "<maya_runtime>\n<user_result>\n"+str(u.user_interpretation,2500)+"\n</user_result>\n<world_visible>\n"+visible.join("\n")+
+ return "<maya_runtime>\n<user_result>\nInterpretation: "+str(u.user_interpretation,2200)+"\nExplicit actions: "+uniq(u.explicit_actions).join(" | ")+"\nExplicit dialogue: "+uniq(u.explicit_dialogue).join(" | ")+"\n</user_result>\n<world_visible>\n"+visible.join("\n")+
  "\n</world_visible>\n<pov>"+w.pov_mode+"</pov>\n<rules>Hidden WORLD state is not user knowledge. Do not invent user choices, dialogue, motives or memories. NPC knowledge is local. Continue ongoing events naturally.</rules>\n</maya_runtime>";
 }
 async function run(){
