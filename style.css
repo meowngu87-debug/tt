@@ -588,3 +588,49 @@
 .mwu-accordion-body .mwu-buttons {
     padding-top: 2px;
 }
+
+
+.mwu-header-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 25px;
+    height: 25px;
+    margin-right: 7px;
+    vertical-align: -3px;
+    border-radius: 7px;
+    background: rgba(140,168,255,.14);
+    color: var(--mwu-accent);
+    font-size: .78rem;
+}
+
+.mwu-connection-note {
+    margin-top: 9px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(140,168,255,.055);
+    border: 1px solid color-mix(in srgb, var(--mwu-accent) 22%, transparent);
+    color: var(--mwu-muted);
+    font-size: .68rem;
+    line-height: 1.45;
+}
+
+.mwu-field select {
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    padding: 4px 7px;
+    border-radius: 7px;
+    border: 1px solid var(--mwu-border);
+    background: rgba(0,0,0,.18);
+    color: var(--mwu-text);
+}
+
+.mwu-field select:focus {
+    outline: none;
+    border-color: var(--mwu-accent);
+    box-shadow: 0 0 0 2px rgba(140,168,255,.14);
+}
+
+.mwu-connection-section .mwu-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
