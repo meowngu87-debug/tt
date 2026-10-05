@@ -32,6 +32,7 @@ const DEFAULT = {
 
 let running = false;
 let uiReady = false;
+let pendingRuntimeContext = "";
 
 function ctx() { return window.SillyTavern?.getContext?.() || null; }
 
@@ -624,20 +625,14 @@ function bootstrapPerception(s) {
 }
 
 function inject(v) {
-    const c = ctx();
-    const f = c?.setExtensionPrompt || window.setExtensionPrompt;
-    if (typeof f !== "function") return;
-
-    const types = c?.extension_prompt_types || window.extension_prompt_types || { BEFORE_PROMPT: 2 };
-    const roles = c?.extension_prompt_roles || window.extension_prompt_roles || { SYSTEM: 0 };
-
-    // Put runtime context before the main prompt/story string so the existing
-    // preset prompt stack (thinking chain, word count, output format, etc.)
-    // remains the final authority.
-    f("MAYA_WORLD_USER_RUNTIME", v || "", types.BEFORE_PROMPT ?? 2, 0, false, roles.SYSTEM);
+    // Do not alter the preset prompt stack. The context is inserted later
+    // into the fully assembled Chat Completion request.
+    pendingRuntimeContext = String(v || "");
 }
 
-function clear() { inject(""); }
+
+
+function clear() { pendingRuntimeContext = ""; }
 
 function runtimePrompt(userResult, s) {
     const p = perceivedWorldForUser(s);
@@ -932,7 +927,7 @@ function ui() {
                         <span>Visible context</span><input id="mwu_visible" type="number" min="4" max="40"><small>Chi tiết môi trường/nhận thức được giữ lại.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>Injection depth</span><input id="mwu_depth" type="number" min="0" max="20"><small>Runtime context được đặt trước Main Prompt / Story String để không ghi đè prompt stack chính.</small>
+                        <span>Injection depth</span><input id="mwu_depth" type="number" min="0" max="20"><small>Runtime context được chèn vào request sau khi ST dựng xong prompt stack, ngay trước User message hiện tại.</small>
                     </label>
                     </div>
                 </div>
@@ -1230,12 +1225,46 @@ function init() {
             await run();
         });
 
+        // ST assembles the complete prompt first. Only now add the runtime
+        // context, immediately before the current User message. This leaves
+        // the preset's thinking chain, D100, word-count and output prompts intact.
+        if (t2.CHAT_COMPLETION_PROMPT_READY) {
+            e.on(t2.CHAT_COMPLETION_PROMPT_READY, (eventData) => {
+                if (globalThis.MayaWorldAgent_auxiliary) return;
+                if (eventData?.dryRun || !pendingRuntimeContext || !Array.isArray(eventData?.chat)) return;
+
+                const marker = "MAYA_WORLD_USER_RUNTIME";
+                if (eventData.chat.some(m => String(m?.content || "").includes(marker))) return;
+
+                const lastUser = eventData.chat.map((m, i) => ({
+                    role: m?.role,
+                    i,
+                })).reverse().find(x => x.role === "user");
+
+                const message = {
+                    role: "system",
+                    name: marker,
+                    content:
+                        "<maya_world_user_runtime>\n"
+                        + "SUPPLEMENTAL RUNTIME CONTEXT ONLY. "
+                        + "It does not override any enabled preset instruction, reasoning/checklist, D100 rules, word-count rule, output format, character rule, or worldbook rule.\n"
+                        + pendingRuntimeContext
+                        + "\n</maya_world_user_runtime>",
+                };
+
+                const at = lastUser ? lastUser.i : eventData.chat.length;
+                eventData.chat.splice(at, 0, message);
+                log("runtime context injected into assembled chat", { index: at });
+                pendingRuntimeContext = "";
+            });
+        }
+
         e.on(t2.GENERATION_ENDED, clear);
         e.on(t2.GENERATION_STOPPED, clear);
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.6.0 loaded");
+    console.log("[MWU] v0.7.0 loaded");
 }
 
 setTimeout(init, 0);
