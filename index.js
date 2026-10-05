@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.10.3
+ * Maya World/User Agent Runtime v0.10.4
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -1420,7 +1420,7 @@ function ui() {
     setInterval(refreshStatus, 1500);
 }
 
-function init() {
+export function init() {
     const c = ctx();
     if (!c) {
         setTimeout(init, 1000);
@@ -1431,12 +1431,25 @@ function init() {
     c.extensionSettings[MODULE] = { ...DEFAULT, ...(c.extensionSettings[MODULE] || {}) };
     c.saveSettingsDebounced?.();
 
-    const t = setInterval(() => {
-        if (document.querySelector("#extensions_settings2") || document.querySelector("#extensions_settings")) {
-            clearInterval(t);
-            ui();
-        }
-    }, 500);
+    const mountUi = () => {
+        if (uiReady) return true;
+        const host = document.querySelector("#extensions_settings2") || document.querySelector("#extensions_settings");
+        if (!host) return false;
+        ui();
+        return true;
+    };
+
+    // Mount as soon as ST creates the Extensions settings DOM. APP_INITIALIZED/
+    // APP_READY are the normal lifecycle points; MutationObserver is the fallback
+    // for themes/layouts that create the settings panel later than the events.
+    if (!mountUi()) {
+        const observer = new MutationObserver(() => {
+            if (mountUi()) observer.disconnect();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => observer.disconnect(), 30000);
+    }
+
 
     if (c.eventSource && c.event_types) {
         const e = c.eventSource;
@@ -1496,7 +1509,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.10.2 loaded");
+    console.log("[MWU] v0.10.4 loaded");
 }
 
 setTimeout(init, 0);
