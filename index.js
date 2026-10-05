@@ -837,6 +837,17 @@ function ui() {
                 <div id="mwu_achievements_list" class="mwu-achievement-list" hidden></div>
             </div>
 
+            <div class="mwu-section mwu-knowledge-section">
+                <button id="mwu_knowledge_toggle" class="mwu-knowledge-toggle" type="button" aria-expanded="false">
+                    <span class="mwu-section-head-inline">
+                        <span>◉</span>
+                        <span><b>Known Facts</b><small>Tất cả thông tin User hiện đang biết</small></span>
+                    </span>
+                    <span id="mwu_knowledge_chevron" class="fa-solid fa-chevron-down"></span>
+                </button>
+                <div id="mwu_knowledge_list" class="mwu-knowledge-list" hidden></div>
+            </div>
+
             <div class="mwu-section mwu-section-tools">
                 <div class="mwu-section-head">
                     <span>⚡</span>
@@ -918,6 +929,30 @@ function ui() {
         $("#mwu_stat_live").text(ss?.background_ledger?.length || 0);
         $("#mwu_stat_achievements").text(ss?.achievements?.length || 0);
 
+        const knowledgeList = $("#mwu_knowledge_list");
+        if (knowledgeList.length && !knowledgeList.prop("hidden")) {
+            knowledgeList.empty();
+
+            const facts = [...new Set([...(ss?.knowledge?.user || []), ...(ss?.perception?.known_facts || [])])]
+                .map(x => String(x || "").trim())
+                .filter(Boolean)
+                .reverse();
+
+            if (!facts.length) {
+                $("<div>")
+                    .addClass("mwu-knowledge-empty")
+                    .text("User chưa có Known Facts nào được lưu.")
+                    .appendTo(knowledgeList);
+            } else {
+                facts.forEach((fact, index) => {
+                    const card = $("<div>").addClass("mwu-knowledge-card");
+                    $("<span>").addClass("mwu-knowledge-index").text(String(index + 1)).appendTo(card);
+                    $("<div>").addClass("mwu-knowledge-text").text(fact).appendTo(card);
+                    card.appendTo(knowledgeList);
+                });
+            }
+        }
+
         const achievementList = $("#mwu_achievements_list");
         if (achievementList.length && !achievementList.prop("hidden")) {
             achievementList.empty();
@@ -976,7 +1011,17 @@ function ui() {
         refreshStatus();
     });
 
-        $("#mwu_run").on("click", async function () {
+        $("#mwu_knowledge_toggle").on("click", function () {
+        const open = !$("#mwu_knowledge_list").prop("hidden");
+        $("#mwu_knowledge_list").prop("hidden", open);
+        $(this).attr("aria-expanded", String(!open));
+        $("#mwu_knowledge_chevron")
+            .toggleClass("fa-chevron-down", open)
+            .toggleClass("fa-chevron-up", !open);
+        refreshStatus();
+    });
+
+    $("#mwu_run").on("click", async function () {
         $(this).prop("disabled", true);
         try { await run(); } finally {
             $(this).prop("disabled", false);
