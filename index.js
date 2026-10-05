@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.10.0
+ * Maya World/User Agent Runtime v0.10.1
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -24,7 +24,6 @@ const DEFAULT = {
     maxVisibleEntities: 12,
     maxSensoryItems: 10,
     maxConsequences: 10,
-    injectDepth: 2,
     debug: false,
     userProfile: "",
     worldProfile: "",
@@ -815,6 +814,11 @@ async function run(options = {}) {
                 s.runtime.opening_knowledge_bootstrapped = true;
             }
 
+            // Commit USER-owned memory before the WORLD request. A WORLD
+            // failure must never roll back facts successfully extracted here.
+            s.runtime.save = "user-memory";
+            saveState(s);
+
             const wp =
             "You are the WORLD ENGINE of a persistent roleplay simulation.\n\n"
             + "Advance the world between user turns when causally appropriate. You own:\n"
@@ -1002,12 +1006,12 @@ function ui() {
                     <div class="mwu-field-grid">
                         <label class="mwu-field">
                             <span>USER Processor</span>
-                            <select id="mwu_user_profile"></select>
+                            <select id="mwu_user_profile" autocomplete="off"></select>
                             <small>Persona + Perception + input thật.</small>
                         </label>
                         <label class="mwu-field">
                             <span>WORLD Engine</span>
-                            <select id="mwu_world_profile"></select>
+                            <select id="mwu_world_profile" autocomplete="off"></select>
                             <small>WORLD_STATE ẩn + mô phỏng thế giới.</small>
                         </label>
                     </div>
@@ -1043,19 +1047,19 @@ function ui() {
                 <div id="memory_body" class="mwu-accordion-body" hidden>
                     <div class="mwu-field-grid">
                     <label class="mwu-field">
-                        <span>History</span><input id="mwu_history" type="number" min="4" max="80"><small>Số message gần nhất đưa cho WORLD.</small>
+                        <span>History</span><input id="mwu_history" type="number" min="4" max="80" autocomplete="off"><small>Số message gần nhất đưa cho WORLD.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>Live ledger</span><input id="mwu_ledger" type="number" min="10" max="200"><small>Số sự kiện nền đang sống tối đa.</small>
+                        <span>Live ledger</span><input id="mwu_ledger" type="number" min="10" max="200" autocomplete="off"><small>Số sự kiện nền đang sống tối đa.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>Achievements</span><input id="mwu_achievements" type="number" min="20" max="500"><small>Mốc lịch sử đã giải quyết.</small>
+                        <span>Achievements</span><input id="mwu_achievements" type="number" min="20" max="500" autocomplete="off"><small>Mốc lịch sử đã giải quyết.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>NPC max</span><input id="mwu_npcs" type="number" min="10" max="200"><small>Giới hạn NPC được lưu state.</small>
+                        <span>NPC max</span><input id="mwu_npcs" type="number" min="10" max="200" autocomplete="off"><small>Giới hạn NPC được lưu state.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>Known facts</span><input id="mwu_facts" type="number" min="20" max="500"><small>Kiến thức User đã hợp lệ biết.</small>
+                        <span>Known facts</span><input id="mwu_facts" type="number" min="20" max="500" autocomplete="off"><small>Kiến thức User đã hợp lệ biết.</small>
                     </label>
                     </div>
                 </div>
@@ -1073,10 +1077,10 @@ function ui() {
                 </div>
                 <div class="mwu-field-grid">
                     <label class="mwu-field">
-                        <span>Visible entities</span><input id="mwu_entities" type="number" min="2" max="50"><small>NPC/đối tượng hiện hữu trong tầm nhận biết.</small>
+                        <span>Visible entities</span><input id="mwu_entities" type="number" min="2" max="50" autocomplete="off"><small>NPC/đối tượng hiện hữu trong tầm nhận biết.</small>
                     </label>
                     <label class="mwu-field">
-                        <span>Visible context</span><input id="mwu_visible" type="number" min="4" max="40"><small>Chi tiết môi trường/nhận thức được giữ lại.</small>
+                        <span>Visible context</span><input id="mwu_visible" type="number" min="4" max="40" autocomplete="off"><small>Chi tiết môi trường/nhận thức được giữ lại.</small>
                     </label>
                     <label class="mwu-field">
                         <span>Injection depth</span><input id="mwu_depth" type="number" min="0" max="20"><small>Runtime context được chèn vào request sau khi ST dựng xong prompt stack, ngay trước User message hiện tại.</small>
@@ -1129,7 +1133,7 @@ function ui() {
                 <div id="developer_body" class="mwu-accordion-body" hidden>
                     <label class="mwu-switch-row compact">
                     <span><span class="mwu-label">Debug console</span><small>Ghi log runtime vào DevTools Console.</small></span>
-                    <input id="mwu_debug" type="checkbox"><span class="mwu-switch"></span>
+                    <input id="mwu_debug" type="checkbox" autocomplete="off"><span class="mwu-switch"></span>
                     </label>
                 </div>
             </div>
@@ -1160,8 +1164,7 @@ function ui() {
     $("#mwu_facts").val(s.maxFacts);
     $("#mwu_entities").val(s.maxVisibleEntities);
     $("#mwu_visible").val(s.maxVisibleItems);
-    $("#mwu_depth").val(s.injectDepth);
-    $("#mwu_debug").prop("checked", s.debug);
+"");    $("#mwu_debug").prop("checked", s.debug);
 
     function bind(id, k, cast = v => v) {
         $(id).on("change", function () {
@@ -1180,8 +1183,7 @@ function ui() {
     bind("#mwu_facts", "maxFacts", Number);
     bind("#mwu_entities", "maxVisibleEntities", Number);
     bind("#mwu_visible", "maxVisibleItems", Number);
-    bind("#mwu_depth", "injectDepth", Number);
-    bind("#mwu_debug", "debug");
+"");    bind("#mwu_debug", "debug");
 
     $("#mwu_user_profile").on("change", function () {
         bag().userProfile = String($(this).val() || "");
@@ -1468,7 +1470,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.10.0 loaded");
+    console.log("[MWU] v0.10.1 loaded");
 }
 
 setTimeout(init, 0);
