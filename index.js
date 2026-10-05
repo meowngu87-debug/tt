@@ -1512,4 +1512,3 @@ export function init() {
     console.log("[MWU] v0.10.4 loaded");
 }
 
-setTimeout(init, 0);
