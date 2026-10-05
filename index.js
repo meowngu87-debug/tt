@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.10.2
+ * Maya World/User Agent Runtime v0.10.3
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -267,10 +267,21 @@ function saveState(s) {
 function persona() {
     const c = ctx();
     try {
-        if (typeof c?.substituteParams === "function") return String(c.substituteParams("{{persona}}") || "").trim();
-        if (typeof window.substituteParams === "function") return String(window.substituteParams("{{persona}}") || "").trim();
-    } catch (e) { log("persona read failed", e); }
-    return "";
+        const powerUser = c?.powerUserSettings || {};
+        const selected = String(powerUser.persona_description || "").trim();
+        if (selected) return selected;
+
+        const personaName = String(powerUser.default_persona || "").trim();
+        const descriptions = powerUser.persona_descriptions;
+        if (personaName && descriptions && typeof descriptions === "object") {
+            return String(descriptions[personaName] || "").trim();
+        }
+
+        return "";
+    } catch (e) {
+        log("persona read failed", e);
+        return "";
+    }
 }
 
 function latestUser() {
@@ -1432,8 +1443,8 @@ function init() {
         const t2 = c.event_types;
 
         // Build USER/WORLD state before ST assembles the final generation prompt.
-        e.on(t2.GENERATION_AFTER_COMMANDS, async () => {
-            if (globalThis.MayaWorldAgent_auxiliary) return;
+        e.on(t2.GENERATION_AFTER_COMMANDS, async (_type, _options, dryRun) => {
+            if (globalThis.MayaWorldAgent_auxiliary || dryRun) return;
             const s = settings();
             if (!s.enabled || !s.autoRun || running) return;
             await run();
