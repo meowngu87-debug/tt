@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.8.2
+ * Maya World/User Agent Runtime v0.9.0
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -75,6 +75,7 @@ function freshState() {
         npcs: {},
         relationships: {},
         knowledge: { user: [], npc: {} },
+        user_state: { notes: [] },
         events: {},
         background_ledger: [],
         achievements: [],
@@ -167,6 +168,8 @@ function migrateState(raw) {
     s.knowledge = s.knowledge && typeof s.knowledge === "object" ? s.knowledge : { user: [], npc: {} };
     s.knowledge.user = uniq(s.knowledge.user);
     s.knowledge.npc = s.knowledge.npc && typeof s.knowledge.npc === "object" ? s.knowledge.npc : {};
+    s.user_state = s.user_state && typeof s.user_state === "object" ? s.user_state : { notes: [] };
+    s.user_state.notes = uniq(s.user_state.notes).slice(-40);
     s.reveals = arr(s.reveals);
     s.runtime = s.runtime && typeof s.runtime === "object" ? s.runtime : {};
     s.runtime.last_user_hash = str(s.runtime.last_user_hash, 100);
@@ -461,8 +464,8 @@ function normWorld(w) {
     };
 }
 
-function merge(s, w) {
-    s.turn = (+s.turn || 0) + 1;
+function merge(s, w, advanceTurn = true) {
+    if (advanceTurn) s.turn = (+s.turn || 0) + 1;
     s.pov = w.pov_mode;
 
     s.world = s.world || { time: "", location: "", active_events: [] };
@@ -606,6 +609,7 @@ function perceivedWorldForUser(s) {
         immediate_consequences: uniq(p.immediate_consequences).slice(0, Number(settings().maxConsequences) || 10),
         known_facts: uniq(p.known_facts).slice(-Math.max(20, Number(settings().maxFacts) || 120)),
         recent_reveals: arr(p.recent_reveals).slice(-10),
+        user_state_notes: uniq(s.user_state?.notes || []).slice(-40),
     };
 }
 
@@ -688,6 +692,8 @@ function runtimePrompt(userResult, s) {
         + "Visible entities: " + visibleEntities.join(" || ") + "\n"
         + "Sensory: " + uniq(p.sensory).join(" | ") + "\n"
         + "Immediate consequences: " + uniq(p.immediate_consequences).join(" | ") + "\n"
+        + "Known facts: " + uniq(p.known_facts).join(" | ") + "\n"
+        + "User state notes: " + uniq(p.user_state_notes || []).join(" | ") + "\n"
         + "</user_perceived_world>\n"
         + "<rules>"
         + "The User only knows the User Perceived World. "
@@ -698,7 +704,8 @@ function runtimePrompt(userResult, s) {
         + "</maya_runtime>";
 }
 
-async function run() {
+async function run(options = {}) {
+    const manual = options?.manual === true;
     const c = ctx();
     const cfg = settings();
     if (!c || !cfg.enabled || running) return false;
@@ -714,12 +721,19 @@ async function run() {
     );
 
     const fingerprint = hash(current.index + "|" + current.text);
-    if (s.runtime.last_user_hash === fingerprint && s.runtime.last_user_index === current.index) {
-        if (!needsOpeningKnowledge) {
-            log("duplicate turn ignored", fingerprint);
-            return false;
-        }
-        log("duplicate turn allowed for one-time opening knowledge bootstrap");
+    const sameProcessedTurn =
+        s.runtime.last_user_hash === fingerprint
+        && s.runtime.last_user_index === current.index;
+
+    if (sameProcessedTurn && !manual && !needsOpeningKnowledge) {
+        log("duplicate turn ignored", fingerprint);
+        return false;
+    }
+
+    if (sameProcessedTurn && manual) {
+        log("manual refresh accepted for already processed user turn", fingerprint);
+    } else if (sameProcessedTurn && needsOpeningKnowledge) {
+        log("duplicate turn allowed for opening knowledge bootstrap");
     }
 
     running = true;
@@ -734,6 +748,8 @@ async function run() {
             + "You are NOT the GM, world simulator, narrator, or NPC manager.\n\n"
             + "USER PERSONA:\n" + persona() + "\n\n"
             + "USER PERCEIVED WORLD:\n" + JSON.stringify(perceivedWorldForUser(s)) + "\n\n"
+            + "CURRENT USER KNOWN FACTS:\n" + JSON.stringify(s.knowledge?.user || []) + "\n\n"
+            + "CURRENT USER STATE NOTES:\n" + JSON.stringify(s.user_state?.notes || []) + "\n\n"
             + (needsOpeningKnowledge
                 ? "INITIAL CARD OPENING SHOWN TO USER:\n" + s.perception.opening_context + "\n\n"
                 : "")
@@ -744,6 +760,8 @@ async function run() {
             + "- Interpret the real user input inside the supplied perception window.\n"
             + "- Resolve references only from information the User can perceive or already knows.\n"
             + "- Preserve only what the user actually said or clearly implied.\n"
+            + "- Extract durable facts the User explicitly states or directly learns from the supplied perception/opening into known_facts_add. These persist as User knowledge.\n"
+            + "- Extract durable current User-state notes only when explicitly established by the User; do not turn every action into a permanent trait.\n"
             + "- Never invent a new user decision, intention, dialogue, memory, motive, or emotion.\n"
             + "- Never simulate NPCs, world events, hidden facts, outcomes, or consequences.\n"
             + "- If the input is ambiguous because the perception window lacks enough information, preserve the ambiguity instead of inventing details.\n"
@@ -757,21 +775,14 @@ async function run() {
         try {
             ur = json(await raw(up));
 
-            const bootstrapFacts = needsOpeningKnowledge
-                ? uniq(ur?.known_facts_add || []).slice(0, Math.max(20, Number(settings().maxFacts) || 120))
-                : [];
-            if (needsOpeningKnowledge) {
+            const userFacts = uniq(ur?.known_facts_add || [])
+                .slice(0, Math.max(20, Number(settings().maxFacts) || 120));
+            const userStateNotes = uniq(ur?.user_state_notes || []).slice(0, 40);
+
+            // Opening bootstrap is complete only after at least one fact was
+            // actually returned. Empty extraction remains retryable.
+            if (needsOpeningKnowledge && userFacts.length) {
                 s.runtime.opening_knowledge_bootstrapped = true;
-            }
-            s.knowledge.user = uniq([
-                ...(s.knowledge?.user || []),
-                ...bootstrapFacts,
-            ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
-            if (bootstrapFacts.length) {
-                s.perception.known_facts = uniq([
-                    ...(s.perception?.known_facts || []),
-                    ...bootstrapFacts,
-                ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
             }
 
             const wp =
@@ -823,6 +834,9 @@ async function run() {
             + "- Once resolved, the detailed background record is deleted by the runtime.\n"
             + "- Never invent a User decision, dialogue, motive, memory, intention, or emotion.\n"
             + "- Do not manufacture drama. If nothing meaningful changes, preserve continuity.\n"
+            + "- Evaluate the supplied opening/current perception and recent chat for durable world state every run. Preserve existing WORLD_STATE when the response has no new value for a field.\n"
+            + "- On the first successful run, initialize only time/location/NPC/event facts explicitly supported by the opening. Do not invent unsupported details.\n"
+            + "- Never erase an existing state field merely because the current patch omits it.\n"
             + "- Continue ongoing off-screen events naturally without narrating them as omniscient prose to the User.\n"
             + "- Do not decide the preset's final D100 result here. Prepare world state and consequences; let the existing preset resolve rolls in the main generation.";
 
@@ -830,7 +844,38 @@ async function run() {
         } finally {
             globalThis.MayaWorldAgent_auxiliary = false;
         }
-        merge(s, wr);
+        const previousPerception = JSON.parse(JSON.stringify(s.perception || {}));
+        merge(s, wr, !sameProcessedTurn);
+
+        // Preserve prior perception/opening when WORLD omits a field.
+        if (!s.perception.visible_context?.length && previousPerception.visible_context?.length) {
+            s.perception.visible_context = previousPerception.visible_context;
+        }
+        if (!s.perception.visible_entities?.length && previousPerception.visible_entities?.length) {
+            s.perception.visible_entities = previousPerception.visible_entities;
+        }
+        if (!s.perception.sensory?.length && previousPerception.sensory?.length) {
+            s.perception.sensory = previousPerception.sensory;
+        }
+        if (!s.perception.immediate_consequences?.length && previousPerception.immediate_consequences?.length) {
+            s.perception.immediate_consequences = previousPerception.immediate_consequences;
+        }
+        s.perception.opening_context = previousPerception.opening_context || s.perception.opening_context || "";
+
+        // User-owned memory is written from USER ENGINE output after every run.
+        s.knowledge.user = uniq([
+            ...(s.knowledge?.user || []),
+            ...userFacts,
+        ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
+
+        s.user_state = s.user_state || { notes: [] };
+        s.user_state.notes = uniq([
+            ...(s.user_state.notes || []),
+            ...userStateNotes,
+        ]).slice(-40);
+
+        s.perception.known_facts = uniq(s.knowledge.user)
+            .slice(-Math.max(20, Number(settings().maxFacts) || 120));
 
         s.runtime.last_user_hash = fingerprint;
         s.runtime.last_user_index = current.index;
@@ -1196,6 +1241,8 @@ function ui() {
             + " • pov=" + (ss?.pov || "LOCAL")
             + " • live=" + (ss?.background_ledger?.length || 0)
             + " • achievements=" + (ss?.achievements?.length || 0)
+            + " • known_facts=" + (ss?.knowledge?.user?.length || 0)
+            + " • user_notes=" + (ss?.user_state?.notes?.length || 0)
             + " • running=" + running
         );
     }
@@ -1245,9 +1292,32 @@ function ui() {
     });
 
     $("#mwu_run").on("click", async function () {
-        $(this).prop("disabled", true);
-        try { await run(); } finally {
-            $(this).prop("disabled", false);
+        const button = $(this);
+        button.prop("disabled", true);
+        try {
+            const before = state();
+            const beforeFacts = before?.knowledge?.user?.length || 0;
+            const beforeTurn = before?.turn || 0;
+            const ok = await run({ manual: true });
+            const after = state();
+            const afterFacts = after?.knowledge?.user?.length || 0;
+
+            if (ok && window.toastr?.success) {
+                const deltaFacts = Math.max(0, afterFacts - beforeFacts);
+                const deltaTurn = (after?.turn || 0) - beforeTurn;
+                toastr.success(
+                    deltaFacts
+                        ? "Maya chạy xong: +" + deltaFacts + " Known Fact(s), turn +" + deltaTurn
+                        : "Maya chạy xong: state đã refresh."
+                );
+            } else if (!ok && window.toastr?.warning) {
+                toastr.warning("Maya không chạy: không có User turn hợp lệ hoặc runtime đang bận.");
+            }
+        } catch (e) {
+            console.error("[MWU] manual run failed", e);
+            if (window.toastr?.error) toastr.error(String(e?.message || e));
+        } finally {
+            button.prop("disabled", false);
             refreshStatus();
         }
     });
@@ -1330,7 +1400,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.8.2 loaded");
+    console.log("[MWU] v0.9.0 loaded");
 }
 
 setTimeout(init, 0);
