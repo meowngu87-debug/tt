@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.5.0
+ * Maya World/User Agent Runtime v0.5.1
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -809,7 +809,7 @@ function ui() {
     d.innerHTML = `
         <div class="inline-drawer-toggle inline-drawer-header mwu-header">
             <div class="mwu-title-wrap">
-                <div class="mwu-title">Maya World/User Runtime</div>
+                <div class="mwu-title"><span class="mwu-header-icon"><i class="fa-solid fa-globe"></i></span>Maya World/User Runtime</div>
                 <div class="mwu-subtitle">WORLD → PERCEPTION → USER • persistent simulation layer</div>
             </div>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
@@ -1224,7 +1224,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.5.0 loaded");
+    console.log("[MWU] v0.5.1 loaded");
 }
 
 setTimeout(init, 0);
