@@ -110,7 +110,11 @@ A background event may be stored as:
 
 ```
 SIMULATED -> HIDDEN -> REVEALED -> RESOLVED
+                              |
+                              +-> ACHIEVEMENT
 ```
+
+When a background event is resolved, the runtime promotes it to an `achievement` containing a concise historical summary and durable consequence, then deletes the detailed background record. This keeps the world memory as a set of live events plus compact historical milestones instead of an ever-growing event log.
 
 Main narrative remains a User perception window instead of omniscient narration.
 
@@ -143,14 +147,15 @@ State includes:
 - `relationships`
 - `knowledge`
 - `events`
-- `background_ledger`
+- `background_ledger` (live unresolved background events)
+- `achievements` (compact milestones for resolved background events)
 - `reveals`
 - `perception`
 - `runtime`
 
 Long-running chats are bounded by configurable limits so metadata does not grow without limit.
 
-v0.3 also migrates the older v0.1/v0.2 state shape and preserves the old background ledger and array-style NPC/relationship updates when possible.
+v0.4 also migrates the older v0.1/v0.2 state shape and preserves the old background ledger and array-style NPC/relationship updates when possible.
 
 ## Continuity behavior
 
