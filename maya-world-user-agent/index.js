@@ -1,5 +1,5 @@
 /*
- * Maya World/User Agent Runtime v0.3.1
+ * Maya World/User Agent Runtime v0.4.0
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -15,6 +15,7 @@ const DEFAULT = {
     autoRun: true,
     historyMessages: 24,
     maxLedgerEntries: 60,
+    maxAchievements: 200,
     maxNpcs: 80,
     maxFacts: 120,
     maxVisibleItems: 12,
@@ -62,7 +63,7 @@ function hash(x) {
 
 function freshState() {
     return {
-        version: 3,
+        version: 4,
         turn: 0,
         pov: "LOCAL",
         world: { time: "", location: "", active_events: [] },
@@ -71,6 +72,7 @@ function freshState() {
         knowledge: { user: [], npc: {} },
         events: {},
         background_ledger: [],
+        achievements: [],
         reveals: [],
         perception: {
             turn: 0,
@@ -134,6 +136,28 @@ function migrateState(raw) {
         s.background_ledger = Array.isArray(s.ledger) ? s.ledger : [];
     }
 
+    // Resolved legacy background events become compact historical milestones.
+    s.achievements = Array.isArray(s.achievements) ? s.achievements : [];
+    for (const e of [...s.background_ledger]) {
+        if (e?.status !== "resolved") continue;
+        const id = String(e.id || ("achievement_" + hash(JSON.stringify(e))));
+        if (!s.achievements.some(a => a.id === id || a.event_id === id)) {
+            s.achievements.push({
+                id,
+                event_id: id,
+                title: str(e.title || e.event || "Resolved event", 240),
+                summary: str(e.summary || e.current_state || e.event || "A background event was resolved.", 1200),
+                when: str(e.when, 200),
+                where: str(e.where, 300),
+                actors: uniq(e.actors).slice(0, 8),
+                consequence: str(e.consequence || e.pending_consequence, 800),
+                turn: Number.isFinite(+e.resolved_turn) ? +e.resolved_turn : 0,
+            });
+        }
+        s.background_ledger = s.background_ledger.filter(x => x.id !== e.id);
+        if (s.events?.[e.id]?.type === "background") delete s.events[e.id];
+    }
+
     s.knowledge = s.knowledge && typeof s.knowledge === "object" ? s.knowledge : { user: [], npc: {} };
     s.knowledge.user = uniq(s.knowledge.user);
     s.knowledge.npc = s.knowledge.npc && typeof s.knowledge.npc === "object" ? s.knowledge.npc : {};
@@ -168,16 +192,18 @@ function migrateState(raw) {
         s.perception.known_facts = s.knowledge.user.slice(-Math.max(20, Number(settings().maxFacts) || 120));
     }
 
-    s.version = 3;
+    s.version = 4;
 
     const maxNpcs = Math.max(10, Number(settings().maxNpcs) || 80);
     const maxFacts = Math.max(20, Number(settings().maxFacts) || 120);
     const maxLedger = Math.max(10, Number(settings().maxLedgerEntries) || 60);
+    const maxAchievements = Math.max(20, Number(settings().maxAchievements) || 200);
 
     s.npcs = Object.fromEntries(Object.entries(s.npcs).slice(-maxNpcs));
     s.knowledge.user = s.knowledge.user.slice(-maxFacts);
     s.reveals = s.reveals.slice(-maxFacts);
     s.background_ledger = s.background_ledger.slice(-maxLedger);
+    s.achievements = s.achievements.slice(-maxAchievements);
 
     s.perception.visible_context = s.perception.visible_context.slice(0, Number(settings().maxVisibleItems) || 12);
     s.perception.visible_entities = s.perception.visible_entities.slice(0, Number(settings().maxVisibleEntities) || 12);
@@ -353,6 +379,16 @@ function normWorld(w) {
                 reveal_condition: str(x?.reveal_condition, 800),
             })).filter(x => x.event),
             background_resolve: uniq(p.background_resolve).slice(0, 20),
+            achievement_add: arr(p.achievement_add).slice(0, 20).map(x => ({
+                id: str(x?.id || x?.event_id, 160),
+                event_id: str(x?.event_id || x?.id, 160),
+                title: str(x?.title, 240),
+                summary: str(x?.summary, 1200),
+                when: str(x?.when, 200),
+                where: str(x?.where, 300),
+                actors: uniq(x?.actors).slice(0, 8),
+                consequence: str(x?.consequence, 800),
+            })).filter(x => x.event_id || x.id || x.summary),
         },
     };
 }
@@ -405,11 +441,49 @@ function merge(s, w) {
         s.events[e.id] ||= { id: e.id, type: "background", status: "hidden" };
     }
 
+    // Resolved background events become compact achievements.
+    // Their detailed background records are deleted after promotion.
+    const explicitAchievements = new Map(
+        w.patch.achievement_add
+            .filter(x => x.event_id || x.id)
+            .map(x => [x.event_id || x.id, x])
+    );
+
     for (const id of w.patch.background_resolve) {
         const e = s.background_ledger.find(x => x.id === id);
-        if (e) e.status = "resolved";
-        if (s.events[id]) s.events[id].status = "resolved";
+        if (!e) continue;
+
+        const a = explicitAchievements.get(id) || {};
+        const achievement = {
+            id: str(a.id || ("achievement_" + id), 160),
+            event_id: id,
+            title: str(a.title || e.title || e.event || "Resolved event", 240),
+            summary: str(a.summary || e.summary || e.current_state || e.event || "A background event was resolved.", 1200),
+            when: str(a.when || e.when, 200),
+            where: str(a.where || e.where, 300),
+            actors: uniq([...(e.actors || []), ...(a.actors || [])]).slice(0, 8),
+            consequence: str(
+                a.consequence || e.pending_consequence
+                || "The event is resolved; only its lasting historical significance remains.",
+                800
+            ),
+            turn: s.turn,
+        };
+
+        const old = s.achievements.find(x => x.event_id === id);
+        if (old) Object.assign(old, achievement);
+        else s.achievements.push(achievement);
+
+        // Delete the detailed background record.
+        s.background_ledger = s.background_ledger.filter(x => x.id !== id);
+
+        // Delete its transient backend event record as well.
+        if (s.events[id]?.type === "background") delete s.events[id];
     }
+
+    s.achievements = s.achievements.slice(
+        -Math.max(20, Number(settings().maxAchievements) || 200)
+    );
 
     // Deterministic reveal firewall:
     // - event-backed reveals must reference a known world event;
@@ -590,6 +664,7 @@ async function run() {
                 relationships: s.relationships,
                 events: s.events,
                 background_ledger: s.background_ledger,
+                achievements: s.achievements,
                 knowledge: { npc: s.knowledge.npc },
             }) + "\n\n"
             + "CURRENT USER PERCEPTION:\n" + JSON.stringify(perceivedWorldForUser(s)) + "\n\n"
@@ -599,7 +674,7 @@ async function run() {
             + '  "pov_mode":"LOCAL|GLOBAL",\n'
             + '  "perception":{"time":"","location":"","visible_context":[],"visible_entities":[{"id":"","name":"","role":"","appearance":"","visible_state":"","relation_to_user":""}],"sensory":[],"immediate_consequences":[]},\n'
             + '  "reveals":[{"event_id":"optional hidden event id","channel":"witnessed|heard|reported|rumor|trace|consequence|inference","text":"what becomes knowable now"}],\n'
-            + '  "state_patch":{"time":"","location":"","active_events":[],"npcs":[{"id":"","role":"","state":"","location":"","knowledge_add":[],"awareness":0,"interest":0}],"relationships":[{"a":"","b":"","change":""}],"events":[{"id":"","status":"","state":""}],"background_add":[{"id":"","when":"","where":"","actors":[],"event":"","current_state":"","pending_consequence":"","reveal_condition":""}],"background_resolve":[]}\n'
+            + '  "state_patch":{"time":"","location":"","active_events":[],"npcs":[{"id":"","role":"","state":"","location":"","knowledge_add":[],"awareness":0,"interest":0}],"relationships":[{"a":"","b":"","change":""}],"events":[{"id":"","status":"","state":""}],"background_add":[{"id":"","when":"","where":"","actors":[],"event":"","current_state":"","pending_consequence":"","reveal_condition":""}],"background_resolve":[],"achievement_add":[{"id":"","event_id":"","title":"","summary":"","when":"","where":"","actors":[],"consequence":""}]}\n'
             + "}\n\n"
             + "Rules:\n"
             + "- WORLD_STATE is the authoritative hidden simulation.\n"
@@ -611,6 +686,9 @@ async function run() {
             + "- NPC knowledge is local to each NPC and is never globally shared by default.\n"
             + "- Awareness is not Interest. Attention requires a causal reason.\n"
             + "- Background events remain hidden until a valid reveal channel exists.\n"
+            + "- When a background event is fully resolved, include its ID in background_resolve and provide one concise achievement_add summary.\n"
+            + "- An achievement is a historical milestone. Keep it general and preserve only durable consequences, not the full event log.\n"
+            + "- Once resolved, the detailed background record is deleted by the runtime.\n"
             + "- Never invent a User decision, dialogue, motive, memory, intention, or emotion.\n"
             + "- Do not manufacture drama. If nothing meaningful changes, preserve continuity.\n"
             + "- Continue ongoing off-screen events naturally without narrating them as omniscient prose to the User.\n"
