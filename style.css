@@ -545,3 +545,46 @@
     font-size: .7rem;
     text-align: center;
 }
+
+
+/* Compact accordion dashboard */
+.mwu-accordion {
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+.mwu-accordion-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 58px;
+    padding: 10px 12px;
+    border: 0;
+    color: var(--mwu-text);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.mwu-accordion-toggle:hover {
+    background: rgba(255,255,255,.035);
+}
+
+.mwu-accordion-chevron {
+    color: var(--mwu-muted);
+    margin-right: 3px;
+}
+
+.mwu-accordion-body {
+    padding: 0 10px 10px;
+}
+
+.mwu-accordion-body .mwu-field-grid {
+    padding-top: 2px;
+}
+
+.mwu-accordion-body .mwu-buttons {
+    padding-top: 2px;
+}
