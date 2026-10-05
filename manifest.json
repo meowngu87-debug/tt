@@ -1,0 +1,11 @@
+{
+  "display_name": "Maya World/User Agent Runtime",
+  "loading_order": 9990,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "OpenAI / user-custom",
+  "version": "0.4.0",
+  "generate_interceptor": "MayaWorldAgent_interceptGeneration"
+}
