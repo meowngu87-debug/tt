@@ -826,6 +826,17 @@ function ui() {
                 </div>
             </div>
 
+            <div class="mwu-section mwu-achievement-section">
+                <button id="mwu_achievements_toggle" class="mwu-achievement-toggle" type="button" aria-expanded="false">
+                    <span class="mwu-section-head-inline">
+                        <span>★</span>
+                        <span><b>Thành tựu</b><small>Các mốc sự kiện đã hoàn tất</small></span>
+                    </span>
+                    <span id="mwu_achievements_chevron" class="fa-solid fa-chevron-down"></span>
+                </button>
+                <div id="mwu_achievements_list" class="mwu-achievement-list" hidden></div>
+            </div>
+
             <div class="mwu-section mwu-section-tools">
                 <div class="mwu-section-head">
                     <span>⚡</span>
@@ -907,6 +918,43 @@ function ui() {
         $("#mwu_stat_live").text(ss?.background_ledger?.length || 0);
         $("#mwu_stat_achievements").text(ss?.achievements?.length || 0);
 
+        const achievementList = $("#mwu_achievements_list");
+        if (achievementList.length && !achievementList.prop("hidden")) {
+            achievementList.empty();
+
+            const achievements = [...(ss?.achievements || [])].reverse();
+            if (!achievements.length) {
+                $("<div>")
+                    .addClass("mwu-achievement-empty")
+                    .text("Chưa có thành tựu nào được ghi nhận.")
+                    .appendTo(achievementList);
+            } else {
+                for (const a of achievements) {
+                    const card = $("<div>").addClass("mwu-achievement-card");
+                    $("<div>").addClass("mwu-achievement-title").text(a.title || "Mốc lịch sử").appendTo(card);
+
+                    const meta = [a.when, a.where, ...(a.actors || [])].filter(Boolean).join(" • ");
+                    if (meta) $("<div>").addClass("mwu-achievement-meta").text(meta).appendTo(card);
+
+                    $("<div>").addClass("mwu-achievement-summary")
+                        .text(a.summary || "Sự kiện đã được hoàn tất.")
+                        .appendTo(card);
+
+                    if (a.consequence) {
+                        $("<div>").addClass("mwu-achievement-consequence")
+                            .text("Hậu quả: " + a.consequence)
+                            .appendTo(card);
+                    }
+
+                    $("<div>").addClass("mwu-achievement-turn")
+                        .text("Mốc runtime: turn " + (a.turn || 0))
+                        .appendTo(card);
+
+                    card.appendTo(achievementList);
+                }
+            }
+        }
+
         $("#mwu_status").text(
             "runtime=" + (enabled ? "enabled" : "disabled")
             + " • auto=" + (settings().autoRun ? "on" : "off")
@@ -918,7 +966,17 @@ function ui() {
         );
     }
 
-    $("#mwu_run").on("click", async function () {
+    $("#mwu_achievements_toggle").on("click", function () {
+        const open = !$("#mwu_achievements_list").prop("hidden");
+        $("#mwu_achievements_list").prop("hidden", open);
+        $(this).attr("aria-expanded", String(!open));
+        $("#mwu_achievements_chevron")
+            .toggleClass("fa-chevron-down", open)
+            .toggleClass("fa-chevron-up", !open);
+        refreshStatus();
+    });
+
+        $("#mwu_run").on("click", async function () {
         $(this).prop("disabled", true);
         try { await run(); } finally {
             $(this).prop("disabled", false);
@@ -969,7 +1027,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.3.0 loaded");
+    console.log("[MWU] v0.4.0 loaded");
 }
 
 setTimeout(init, 0);
