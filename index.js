@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.9.0
+ * Maya World/User Agent Runtime v0.10.0
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -93,7 +93,19 @@ function freshState() {
             recent_reveals: [],
             opening_context: "",
         },
-        runtime: { last_user_hash: "", last_user_index: -1, opening_knowledge_bootstrapped: false },
+        runtime: {
+            last_user_hash: "",
+            last_user_index: -1,
+            opening_knowledge_bootstrapped: false,
+            last_run_at: 0,
+            last_run_mode: "",
+            last_error: "",
+            last_stage: "idle",
+            user_call: "idle",
+            world_call: "idle",
+            save: "idle",
+            inject: "idle",
+        },
     };
 }
 
@@ -175,6 +187,14 @@ function migrateState(raw) {
     s.runtime.last_user_hash = str(s.runtime.last_user_hash, 100);
     s.runtime.last_user_index = Number.isFinite(+s.runtime.last_user_index) ? +s.runtime.last_user_index : -1;
     s.runtime.opening_knowledge_bootstrapped = !!s.runtime.opening_knowledge_bootstrapped;
+    s.runtime.last_run_at = Number.isFinite(+s.runtime.last_run_at) ? +s.runtime.last_run_at : 0;
+    s.runtime.last_run_mode = str(s.runtime.last_run_mode, 30);
+    s.runtime.last_error = str(s.runtime.last_error, 1200);
+    s.runtime.last_stage = str(s.runtime.last_stage || "idle", 40);
+    s.runtime.user_call = str(s.runtime.user_call || "idle", 40);
+    s.runtime.world_call = str(s.runtime.world_call || "idle", 40);
+    s.runtime.save = str(s.runtime.save || "idle", 40);
+    s.runtime.inject = str(s.runtime.inject || "idle", 40);
 
     const oldP = s.perception && typeof s.perception === "object" ? s.perception : {};
     s.perception = {
@@ -708,7 +728,7 @@ async function run(options = {}) {
     const manual = options?.manual === true;
     const c = ctx();
     const cfg = settings();
-    if (!c || !cfg.enabled || running) return false;
+    if (!c || (!cfg.enabled && !manual) || running) return false;
 
     const current = latestUser();
     if (!current.text) return false;
@@ -737,6 +757,14 @@ async function run(options = {}) {
     }
 
     running = true;
+    s.runtime.last_run_at = Date.now();
+    s.runtime.last_run_mode = manual ? "manual" : "auto";
+    s.runtime.last_error = "";
+    s.runtime.last_stage = "user";
+    s.runtime.user_call = "running";
+    s.runtime.world_call = "idle";
+    s.runtime.save = "idle";
+    s.runtime.inject = "idle";
 
     try {
         /*
@@ -774,6 +802,8 @@ async function run(options = {}) {
         let wr;
         try {
             ur = json(await raw(up));
+            s.runtime.user_call = "ok";
+            s.runtime.last_stage = "world";
 
             const userFacts = uniq(ur?.known_facts_add || [])
                 .slice(0, Math.max(20, Number(settings().maxFacts) || 120));
@@ -841,6 +871,8 @@ async function run(options = {}) {
             + "- Do not decide the preset's final D100 result here. Prepare world state and consequences; let the existing preset resolve rolls in the main generation.";
 
             wr = normWorld(await quiet(wp));
+            s.runtime.world_call = "ok";
+            s.runtime.last_stage = "merge";
         } finally {
             globalThis.MayaWorldAgent_auxiliary = false;
         }
@@ -881,7 +913,10 @@ async function run(options = {}) {
         s.runtime.last_user_index = current.index;
 
         saveState(s);
+        s.runtime.save = "ok";
+        s.runtime.last_stage = "inject";
         inject(runtimePrompt(ur, s));
+        s.runtime.inject = "pending";
 
         log("turn committed", {
             turn: s.turn,
@@ -893,7 +928,13 @@ async function run(options = {}) {
         return true;
     } catch (e) {
         warn(e);
+        s.runtime.last_error = String(e?.message || e);
+        s.runtime.last_stage = "error";
+        if (s.runtime.user_call === "running") s.runtime.user_call = "error";
+        if (s.runtime.world_call === "running") s.runtime.world_call = "error";
+        if (s.runtime.save !== "ok") s.runtime.save = "error";
         clear();
+        try { saveState(s); } catch (_) {}
         return false;
     } finally {
         running = false;
@@ -1097,6 +1138,10 @@ function ui() {
                 <div class="mwu-live-dot"></div>
                 <pre id="mwu_status">Initializing…</pre>
             </div>
+            <div class="mwu-diagnostic" id="mwu_diagnostic">
+                <div><b>Runtime health</b></div>
+                <div id="mwu_diagnostic_text">Idle</div>
+            </div>
         </div>
     `;
 
@@ -1234,6 +1279,17 @@ function ui() {
             }
         }
 
+        $("#mwu_diagnostic_text").text(
+            [
+                "stage=" + (ss?.runtime?.last_stage || "idle"),
+                "USER=" + (ss?.runtime?.user_call || "idle"),
+                "WORLD=" + (ss?.runtime?.world_call || "idle"),
+                "SAVE=" + (ss?.runtime?.save || "idle"),
+                "INJECT=" + (ss?.runtime?.inject || "idle"),
+                ss?.runtime?.last_error ? "ERROR=" + ss.runtime.last_error : "ERROR=none",
+            ].join(" • ")
+        );
+
         $("#mwu_status").text(
             "runtime=" + (enabled ? "enabled" : "disabled")
             + " • auto=" + (settings().autoRun ? "on" : "off")
@@ -1243,6 +1299,11 @@ function ui() {
             + " • achievements=" + (ss?.achievements?.length || 0)
             + " • known_facts=" + (ss?.knowledge?.user?.length || 0)
             + " • user_notes=" + (ss?.user_state?.notes?.length || 0)
+            + " • stage=" + (ss?.runtime?.last_stage || "idle")
+            + " • user=" + (ss?.runtime?.user_call || "idle")
+            + " • world=" + (ss?.runtime?.world_call || "idle")
+            + " • save=" + (ss?.runtime?.save || "idle")
+            + " • inject=" + (ss?.runtime?.inject || "idle")
             + " • running=" + running
         );
     }
@@ -1390,6 +1451,13 @@ function init() {
 
                 const at = lastUser ? lastUser.i : eventData.chat.length;
                 eventData.chat.splice(at, 0, message);
+                const activeState = state();
+                if (activeState?.runtime) {
+                    activeState.runtime.inject = "ok";
+                    activeState.runtime.last_stage = "complete";
+                    activeState.runtime.last_error = "";
+                    saveState(activeState);
+                }
                 log("runtime context injected into assembled chat", { index: at });
                 pendingRuntimeContext = "";
             });
@@ -1400,7 +1468,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.9.0 loaded");
+    console.log("[MWU] v0.10.0 loaded");
 }
 
 setTimeout(init, 0);
