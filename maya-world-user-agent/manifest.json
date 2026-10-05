@@ -6,6 +6,6 @@
   "js": "index.js",
   "css": "style.css",
   "author": "OpenAI / user-custom",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "generate_interceptor": "MayaWorldAgent_interceptGeneration"
 }
