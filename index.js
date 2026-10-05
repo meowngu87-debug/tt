@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.7.0
+ * Maya World/User Agent Runtime v0.8.0
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -90,6 +90,7 @@ function freshState() {
             immediate_consequences: [],
             known_facts: [],
             recent_reveals: [],
+            opening_context: "",
         },
         runtime: { last_user_hash: "", last_user_index: -1 },
     };
@@ -183,6 +184,7 @@ function migrateState(raw) {
         immediate_consequences: uniq(oldP.immediate_consequences),
         known_facts: uniq(oldP.known_facts),
         recent_reveals: arr(oldP.recent_reveals),
+        opening_context: str(oldP.opening_context, 14000),
     };
 
     if (!s.perception.recent_reveals.length) {
@@ -584,6 +586,7 @@ function merge(s, w) {
         ]).slice(0, Number(settings().maxConsequences) || 10),
         known_facts: uniq(s.knowledge.user).slice(-Math.max(20, Number(settings().maxFacts) || 120)),
         recent_reveals: w.reveals.slice(-10),
+        opening_context: str(s.perception?.opening_context || "", 14000),
     };
 
     return state();
@@ -607,20 +610,38 @@ function perceivedWorldForUser(s) {
 
 function bootstrapPerception(s) {
     if (s?.perception?.turn > 0 || s?.perception?.visible_context?.length) return;
-    const a = latestAssistant();
-    if (!a.text) return;
+
+    const c = ctx();
+    const firstChatAssistant = arr(c?.chat).find(m =>
+        m && m.is_user !== true && m.role !== "user" && String(m.mes ?? m.content ?? "").trim()
+    );
+    const cardFirstMes =
+        c?.characters?.[c?.characterId]?.first_mes
+        || c?.characters?.[c?.characterId]?.data?.first_mes
+        || "";
+    const opening = String(firstChatAssistant?.mes ?? firstChatAssistant?.content ?? cardFirstMes ?? "").trim();
+    if (!opening) return;
+
+    // Preserve both the opening premise and the ending scene. Never keep only
+    // the tail, because the reincarnation/transmigration premise is commonly
+    // stated at the very beginning of the card's first message.
+    const max = 14000;
+    const openingContext = opening.length <= max
+        ? opening
+        : opening.slice(0, 7000) + "\n...[OPENING MIDDLE OMITTED FOR RUNTIME SIZE]...\n" + opening.slice(-7000);
 
     s.perception = {
         turn: 0,
         pov: "LOCAL",
         time: "",
         location: "",
-        visible_context: [a.text.slice(-5000)],
+        visible_context: [openingContext],
         visible_entities: [],
         sensory: [],
         immediate_consequences: [],
         known_facts: uniq(s.knowledge?.user || []).slice(-Math.max(20, Number(settings().maxFacts) || 120)),
         recent_reveals: [],
+        opening_context: openingContext,
     };
 }
 
@@ -693,22 +714,42 @@ async function run() {
             + "You are NOT the GM, world simulator, narrator, or NPC manager.\n\n"
             + "USER PERSONA:\n" + persona() + "\n\n"
             + "USER PERCEIVED WORLD:\n" + JSON.stringify(perceivedWorldForUser(s)) + "\n\n"
+            + (s.turn === 0 && s.perception?.opening_context
+                ? "INITIAL CARD OPENING SHOWN TO USER:\n" + s.perception.opening_context + "\n\n"
+                : "")
             + "ACTUAL USER INPUT:\n" + current.text + "\n\n"
             + "Return JSON only:\n"
-            + '{"user_interpretation":"...","explicit_actions":["..."],"explicit_dialogue":["..."],"user_state_notes":["..."]}\n\n'
+            + '{"user_interpretation":"...","explicit_actions":["..."],"explicit_dialogue":["..."],"user_state_notes":["..."],"known_facts_add":["..."]}\n\n'
             + "Rules:\n"
             + "- Interpret the real user input inside the supplied perception window.\n"
             + "- Resolve references only from information the User can perceive or already knows.\n"
             + "- Preserve only what the user actually said or clearly implied.\n"
             + "- Never invent a new user decision, intention, dialogue, memory, motive, or emotion.\n"
             + "- Never simulate NPCs, world events, hidden facts, outcomes, or consequences.\n"
-            + "- If the input is ambiguous because the perception window lacks enough information, preserve the ambiguity instead of inventing details.";
+            + "- If the input is ambiguous because the perception window lacks enough information, preserve the ambiguity instead of inventing details.\n"
+            + "- On the bootstrap turn, treat INITIAL CARD OPENING as information explicitly presented to User. Extract durable facts that the User thereby knows into known_facts_add. Do not require those facts to have been typed by User.\n"
+            + "- A transmigration/reincarnation premise explicitly presented in the opening is a User-known fact when the opening presents it as User's own experience. Preserve it in known_facts_add.\n"
+            + "- Do not turn narrator-only secrets that are not presented as User experience into User knowledge.";
 
         globalThis.MayaWorldAgent_auxiliary = true;
         let ur;
         let wr;
         try {
             ur = json(await raw(up));
+
+            const bootstrapFacts = s.turn === 0
+                ? uniq(ur?.known_facts_add || []).slice(0, Math.max(20, Number(settings().maxFacts) || 120))
+                : [];
+            s.knowledge.user = uniq([
+                ...(s.knowledge?.user || []),
+                ...bootstrapFacts,
+            ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
+            if (bootstrapFacts.length) {
+                s.perception.known_facts = uniq([
+                    ...(s.perception?.known_facts || []),
+                    ...bootstrapFacts,
+                ]).slice(-Math.max(20, Number(settings().maxFacts) || 120));
+            }
 
             const wp =
             "You are the WORLD ENGINE of a persistent roleplay simulation.\n\n"
@@ -734,6 +775,8 @@ async function run() {
                 knowledge: { npc: s.knowledge.npc },
             }) + "\n\n"
             + "CURRENT USER PERCEPTION:\n" + JSON.stringify(perceivedWorldForUser(s)) + "\n\n"
+            + "USER KNOWN FACTS (ONLY FACTS LEGITIMATELY KNOWN BY USER):\n"
+            + JSON.stringify(s.knowledge?.user || []) + "\n\n"
             + "RECENT CHAT:\n" + JSON.stringify(history()) + "\n\n"
             + "Return JSON only:\n"
             + "{\n"
@@ -1264,7 +1307,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.7.0 loaded");
+    console.log("[MWU] v0.8.0 loaded");
 }
 
 setTimeout(init, 0);
