@@ -349,3 +349,125 @@
     .mwu-field-grid { grid-template-columns: 1fr; }
     .mwu-hero { align-items: flex-start; }
 }
+
+
+.mwu-achievement-section {
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+.mwu-achievement-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 58px;
+    padding: 10px 12px;
+    border: 0;
+    color: var(--mwu-text);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.mwu-achievement-toggle:hover {
+    background: rgba(255,255,255,.035);
+}
+
+.mwu-section-head-inline {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.mwu-section-head-inline > span:first-child {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: rgba(255,198,86,.12);
+    color: #ffd27b;
+}
+
+.mwu-section-head-inline b {
+    display: block;
+    font-size: .86rem;
+}
+
+.mwu-section-head-inline small {
+    display: block;
+    margin-top: 2px;
+    color: var(--mwu-muted);
+    font-size: .69rem;
+}
+
+#mwu_achievements_chevron {
+    color: var(--mwu-muted);
+    margin-right: 3px;
+    transition: transform .16s ease;
+}
+
+.mwu-achievement-list {
+    padding: 0 10px 10px;
+}
+
+.mwu-achievement-card {
+    position: relative;
+    margin-top: 7px;
+    padding: 10px 11px 10px 13px;
+    border-radius: 10px;
+    background: rgba(0,0,0,.14);
+    border: 1px solid var(--mwu-border);
+}
+
+.mwu-achievement-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+    width: 2px;
+    border-radius: 2px;
+    background: rgba(255,198,86,.65);
+}
+
+.mwu-achievement-title {
+    font-weight: 800;
+    font-size: .8rem;
+}
+
+.mwu-achievement-meta {
+    margin-top: 3px;
+    color: var(--mwu-muted);
+    font-size: .64rem;
+}
+
+.mwu-achievement-summary {
+    margin-top: 7px;
+    font-size: .73rem;
+    line-height: 1.45;
+}
+
+.mwu-achievement-consequence {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid color-mix(in srgb, var(--mwu-border) 75%, transparent);
+    color: var(--mwu-text);
+    font-size: .69rem;
+    line-height: 1.4;
+}
+
+.mwu-achievement-turn {
+    margin-top: 6px;
+    color: var(--mwu-muted);
+    font-size: .61rem;
+}
+
+.mwu-achievement-empty {
+    padding: 12px;
+    color: var(--mwu-muted);
+    font-size: .7rem;
+    text-align: center;
+}
