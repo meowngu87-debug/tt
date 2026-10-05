@@ -1,7 +1,7 @@
 import { ConnectionManagerRequestService } from "../../shared.js";
 
 /*
- * Maya World/User Agent Runtime v0.8.0
+ * Maya World/User Agent Runtime v0.8.1
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -92,7 +92,7 @@ function freshState() {
             recent_reveals: [],
             opening_context: "",
         },
-        runtime: { last_user_hash: "", last_user_index: -1 },
+        runtime: { last_user_hash: "", last_user_index: -1, opening_knowledge_bootstrapped: false },
     };
 }
 
@@ -171,6 +171,7 @@ function migrateState(raw) {
     s.runtime = s.runtime && typeof s.runtime === "object" ? s.runtime : {};
     s.runtime.last_user_hash = str(s.runtime.last_user_hash, 100);
     s.runtime.last_user_index = Number.isFinite(+s.runtime.last_user_index) ? +s.runtime.last_user_index : -1;
+    s.runtime.opening_knowledge_bootstrapped = !!s.runtime.opening_knowledge_bootstrapped;
 
     const oldP = s.perception && typeof s.perception === "object" ? s.perception : {};
     s.perception = {
@@ -609,26 +610,38 @@ function perceivedWorldForUser(s) {
 }
 
 function bootstrapPerception(s) {
+    const c = ctx();
+
+    const getOpening = () => {
+        const firstChatAssistant = arr(c?.chat).find(m =>
+            m && m.is_user !== true && m.role !== "user" && String(m.mes ?? m.content ?? "").trim()
+        );
+        const cardFirstMes =
+            c?.characters?.[c?.characterId]?.first_mes
+            || c?.characters?.[c?.characterId]?.data?.first_mes
+            || "";
+        const opening = String(firstChatAssistant?.mes ?? firstChatAssistant?.content ?? cardFirstMes ?? "").trim();
+        if (!opening) return "";
+        const max = 14000;
+        return opening.length <= max
+            ? opening
+            : opening.slice(0, 7000) + "\n...[OPENING MIDDLE OMITTED FOR RUNTIME SIZE]...\n" + opening.slice(-7000);
+    };
+
+    // Backfill the actual card opening for existing chats created before v0.8.
+    if (!s?.perception?.opening_context) {
+        const openingContext = getOpening();
+        if (openingContext) {
+            s.perception.opening_context = openingContext;
+            if (!s.perception.visible_context?.length) s.perception.visible_context = [openingContext];
+        }
+    }
+
+    // New chat: initialize perception from the same opening the user actually saw.
     if (s?.perception?.turn > 0 || s?.perception?.visible_context?.length) return;
 
-    const c = ctx();
-    const firstChatAssistant = arr(c?.chat).find(m =>
-        m && m.is_user !== true && m.role !== "user" && String(m.mes ?? m.content ?? "").trim()
-    );
-    const cardFirstMes =
-        c?.characters?.[c?.characterId]?.first_mes
-        || c?.characters?.[c?.characterId]?.data?.first_mes
-        || "";
-    const opening = String(firstChatAssistant?.mes ?? firstChatAssistant?.content ?? cardFirstMes ?? "").trim();
-    if (!opening) return;
-
-    // Preserve both the opening premise and the ending scene. Never keep only
-    // the tail, because the reincarnation/transmigration premise is commonly
-    // stated at the very beginning of the card's first message.
-    const max = 14000;
-    const openingContext = opening.length <= max
-        ? opening
-        : opening.slice(0, 7000) + "\n...[OPENING MIDDLE OMITTED FOR RUNTIME SIZE]...\n" + opening.slice(-7000);
+    const openingContext = s?.perception?.opening_context || getOpening();
+    if (!openingContext) return;
 
     s.perception = {
         turn: 0,
@@ -695,6 +708,10 @@ async function run() {
 
     const s = state();
     bootstrapPerception(s);
+    const needsOpeningKnowledge = !!(
+        s?.perception?.opening_context
+        && !s?.runtime?.opening_knowledge_bootstrapped
+    );
 
     const fingerprint = hash(current.index + "|" + current.text);
     if (s.runtime.last_user_hash === fingerprint && s.runtime.last_user_index === current.index) {
@@ -714,7 +731,7 @@ async function run() {
             + "You are NOT the GM, world simulator, narrator, or NPC manager.\n\n"
             + "USER PERSONA:\n" + persona() + "\n\n"
             + "USER PERCEIVED WORLD:\n" + JSON.stringify(perceivedWorldForUser(s)) + "\n\n"
-            + (s.turn === 0 && s.perception?.opening_context
+            + (needsOpeningKnowledge
                 ? "INITIAL CARD OPENING SHOWN TO USER:\n" + s.perception.opening_context + "\n\n"
                 : "")
             + "ACTUAL USER INPUT:\n" + current.text + "\n\n"
@@ -737,9 +754,12 @@ async function run() {
         try {
             ur = json(await raw(up));
 
-            const bootstrapFacts = s.turn === 0
+            const bootstrapFacts = needsOpeningKnowledge
                 ? uniq(ur?.known_facts_add || []).slice(0, Math.max(20, Number(settings().maxFacts) || 120))
                 : [];
+            if (needsOpeningKnowledge) {
+                s.runtime.opening_knowledge_bootstrapped = true;
+            }
             s.knowledge.user = uniq([
                 ...(s.knowledge?.user || []),
                 ...bootstrapFacts,
@@ -1307,7 +1327,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.8.0 loaded");
+    console.log("[MWU] v0.8.1 loaded");
 }
 
 setTimeout(init, 0);
