@@ -1,5 +1,5 @@
 /*
- * Maya World/User Agent Runtime v0.3.0
+ * Maya World/User Agent Runtime v0.3.1
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -411,8 +411,20 @@ function merge(s, w) {
         if (s.events[id]) s.events[id].status = "resolved";
     }
 
+    // Deterministic reveal firewall:
+    // - event-backed reveals must reference a known world event;
+    // - unbound reveals are limited to direct perception/consequence channels.
     for (const r of w.reveals) {
         const e = r.event_id && s.background_ledger.find(x => x.id === r.event_id);
+        const unboundAllowed = ["witnessed", "heard", "consequence"].includes(r.channel);
+        if (r.event_id && !e) {
+            log("discarding reveal with unknown event id", r.event_id);
+            continue;
+        }
+        if (!r.event_id && !unboundAllowed) {
+            log("discarding unbound reveal channel", r.channel);
+            continue;
+        }
         if (e) e.status = "revealed";
         s.reveals.push({ turn: s.turn, event_id: r.event_id, channel: r.channel, text: r.text });
         s.knowledge.user.push(r.text);
