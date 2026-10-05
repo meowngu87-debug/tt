@@ -1,5 +1,7 @@
+import { ConnectionManagerRequestService } from "../../shared.js";
+
 /*
- * Maya World/User Agent Runtime v0.4.0
+ * Maya World/User Agent Runtime v0.5.0
  * WORLD_STATE -> PERCEPTION_STATE -> USER_ENGINE firewall.
  *
  * The existing Maya D100 preset remains authoritative for:
@@ -24,6 +26,8 @@ const DEFAULT = {
     maxConsequences: 10,
     injectDepth: 2,
     debug: false,
+    userProfile: "",
+    worldProfile: "",
 };
 
 let running = false;
@@ -276,16 +280,76 @@ function history() {
     }));
 }
 
+function selectedProfile(kind) {
+    return kind === "world" ? String(settings().worldProfile || "") : String(settings().userProfile || "");
+}
+
+function getProfiles() {
+    try {
+        if (ctx()?.extensionSettings?.disabledExtensions?.includes("connection-manager")) return [];
+        return ConnectionManagerRequestService.getSupportedProfiles() || [];
+    } catch (e) {
+        log("connection profiles unavailable", e);
+        return [];
+    }
+}
+
+async function requestViaProfile(profileId, prompt, maxTokens) {
+    try {
+        const result = await ConnectionManagerRequestService.sendRequest(
+            profileId,
+            prompt,
+            maxTokens,
+            {
+                stream: false,
+                signal: null,
+                extractData: true,
+                includePreset: true,
+                includeInstruct: true,
+            },
+        );
+        const content = typeof result === "string" ? result : (result?.content ?? result?.text ?? "");
+        if (!String(content).trim()) throw Error("Selected Connection Profile returned no content.");
+        return String(content);
+    } catch (e) {
+        throw Error("LLM Connection failed: " + (e?.message || e));
+    }
+}
+
 async function raw(prompt) {
+    const profileId = selectedProfile("user");
+    if (profileId) return await requestViaProfile(profileId, prompt, 1400);
+
     const f = ctx()?.generateRaw || window.generateRaw;
     if (typeof f !== "function") throw Error("generateRaw unavailable");
     return await f({ prompt });
 }
 
 async function quiet(prompt) {
+    const profileId = selectedProfile("world");
+    if (profileId) return await requestViaProfile(profileId, prompt, 2200);
+
     const f = ctx()?.generateQuietPrompt || window.generateQuietPrompt;
     if (typeof f !== "function") throw Error("generateQuietPrompt unavailable");
     return await f({ quietPrompt: prompt });
+}
+
+function refreshProfileDropdowns() {
+    const profiles = getProfiles();
+    const buildOptions = (select) => {
+        select.empty();
+        $("<option>").val("").text("Use current ST connection").appendTo(select);
+        for (const profile of profiles) {
+            $("<option>").val(profile.id).text(profile.name || profile.id).appendTo(select);
+        }
+    };
+    const user = $("#mwu_user_profile");
+    const world = $("#mwu_world_profile");
+    if (!user.length || !world.length) return;
+    buildOptions(user);
+    buildOptions(world);
+    user.val(settings().userProfile || "");
+    world.val(settings().worldProfile || "");
 }
 
 function json(s) {
@@ -769,6 +833,34 @@ function ui() {
                 <div class="mwu-stat"><span>Achievements</span><b id="mwu_stat_achievements">0</b></div>
             </div>
 
+            <div class="mwu-section mwu-accordion mwu-connection-section">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="connection_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline">
+                        <span><i class="fa-solid fa-plug"></i></span>
+                        <span><b>LLM Connection</b><small>Connection Profile riêng cho USER / WORLD</small></span>
+                    </span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="connection_body" class="mwu-accordion-body" hidden>
+                    <div class="mwu-field-grid">
+                        <label class="mwu-field">
+                            <span>USER Processor</span>
+                            <select id="mwu_user_profile"></select>
+                            <small>Persona + Perception + input thật.</small>
+                        </label>
+                        <label class="mwu-field">
+                            <span>WORLD Engine</span>
+                            <select id="mwu_world_profile"></select>
+                            <small>WORLD_STATE ẩn + mô phỏng thế giới.</small>
+                        </label>
+                    </div>
+                    <div class="mwu-connection-note">
+                        API URL, API Key, Model và generation preset được lấy từ Connection Profile của SillyTavern.
+                        Không chọn profile = dùng connection đang active cho chat.
+                    </div>
+                </div>
+            </div>
+
             <div class="mwu-section mwu-accordion">
                 <button class="mwu-accordion-toggle" type="button" data-mwu-target="activity_body" aria-expanded="false">
                     <span class="mwu-section-head-inline"><span>⚙</span><span><b>Hoạt động</b><small>Điều khiển runtime</small></span></span>
@@ -896,6 +988,8 @@ function ui() {
 
     const s = settings();
 
+    refreshProfileDropdowns();
+
     $("#mwu_enabled").prop("checked", s.enabled);
     $("#mwu_auto").prop("checked", s.autoRun);
     $("#mwu_history").val(s.historyMessages);
@@ -927,6 +1021,26 @@ function ui() {
     bind("#mwu_visible", "maxVisibleItems", Number);
     bind("#mwu_depth", "injectDepth", Number);
     bind("#mwu_debug", "debug");
+
+    $("#mwu_user_profile").on("change", function () {
+        bag().userProfile = String($(this).val() || "");
+        ctx()?.saveSettingsDebounced?.();
+        refreshStatus();
+    });
+
+    $("#mwu_world_profile").on("change", function () {
+        bag().worldProfile = String($(this).val() || "");
+        ctx()?.saveSettingsDebounced?.();
+        refreshStatus();
+    });
+
+    if (ctx()?.eventSource && ctx()?.event_types) {
+        [
+            ctx().event_types.CONNECTION_PROFILE_CREATED,
+            ctx().event_types.CONNECTION_PROFILE_UPDATED,
+            ctx().event_types.CONNECTION_PROFILE_DELETED,
+        ].filter(Boolean).forEach(eventName => ctx().eventSource.on(eventName, refreshProfileDropdowns));
+    }
 
     function refreshStatus() {
         const ss = state();
@@ -1110,7 +1224,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.4.1 loaded");
+    console.log("[MWU] v0.5.0 loaded");
 }
 
 setTimeout(init, 0);
