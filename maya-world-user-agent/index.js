@@ -769,27 +769,30 @@ function ui() {
                 <div class="mwu-stat"><span>Achievements</span><b id="mwu_stat_achievements">0</b></div>
             </div>
 
-            <div class="mwu-section">
-                <div class="mwu-section-head">
-                    <span>⚙</span>
-                    <div><b>Hoạt động</b><small>Điều khiển runtime</small></div>
+            <div class="mwu-section mwu-accordion">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="activity_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline"><span>⚙</span><span><b>Hoạt động</b><small>Điều khiển runtime</small></span></span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="activity_body" class="mwu-accordion-body" hidden>
+                    <label class="mwu-switch-row">
+                        <span><span class="mwu-label">Enable runtime</span><small>Bật lớp WORLD/USER runtime cho chat hiện tại.</small></span>
+                        <input id="mwu_enabled" type="checkbox"><span class="mwu-switch"></span>
+                    </label>
+                    <label class="mwu-switch-row">
+                        <span><span class="mwu-label">Auto run</span><small>Chạy USER + WORLD trước mỗi lần generate bình thường.</small></span>
+                        <input id="mwu_auto" type="checkbox"><span class="mwu-switch"></span>
+                    </label>
                 </div>
-                <label class="mwu-switch-row">
-                    <span><span class="mwu-label">Enable runtime</span><small>Bật lớp WORLD/USER runtime cho chat hiện tại.</small></span>
-                    <input id="mwu_enabled" type="checkbox"><span class="mwu-switch"></span>
-                </label>
-                <label class="mwu-switch-row">
-                    <span><span class="mwu-label">Auto run</span><small>Chạy USER + WORLD trước mỗi lần generate bình thường.</small></span>
-                    <input id="mwu_auto" type="checkbox"><span class="mwu-switch"></span>
-                </label>
             </div>
 
-            <div class="mwu-section">
-                <div class="mwu-section-head">
-                    <span>◫</span>
-                    <div><b>Bộ nhớ thế giới</b><small>State sống và lịch sử đã hoàn tất</small></div>
-                </div>
-                <div class="mwu-field-grid">
+            <div class="mwu-section mwu-accordion">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="memory_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline"><span>◫</span><span><b>Bộ nhớ thế giới</b><small>State sống và lịch sử đã hoàn tất</small></span></span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="memory_body" class="mwu-accordion-body" hidden>
+                    <div class="mwu-field-grid">
                     <label class="mwu-field">
                         <span>History</span><input id="mwu_history" type="number" min="4" max="80"><small>Số message gần nhất đưa cho WORLD.</small>
                     </label>
@@ -805,12 +808,18 @@ function ui() {
                     <label class="mwu-field">
                         <span>Known facts</span><input id="mwu_facts" type="number" min="20" max="500"><small>Kiến thức User đã hợp lệ biết.</small>
                     </label>
+                    </div>
                 </div>
             </div>
 
-            <div class="mwu-section">
-                <div class="mwu-section-head">
-                    <span>◉</span>
+            <div class="mwu-section mwu-accordion">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="perception_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline"><span>◉</span><span><b>Perception</b><small>Những gì User thực sự được trải nghiệm</small></span></span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="perception_body" class="mwu-accordion-body" hidden>
+                    <div class="mwu-field-grid">
+
                     <div><b>Perception</b><small>Những gì User thực sự được trải nghiệm</small></div>
                 </div>
                 <div class="mwu-field-grid">
@@ -823,6 +832,7 @@ function ui() {
                     <label class="mwu-field">
                         <span>Injection depth</span><input id="mwu_depth" type="number" min="0" max="20"><small>Vị trí context Maya trong prompt chính. 2 là mức mặc định.</small>
                     </label>
+                    </div>
                 </div>
             </div>
 
@@ -848,27 +858,31 @@ function ui() {
                 <div id="mwu_knowledge_list" class="mwu-knowledge-list" hidden></div>
             </div>
 
-            <div class="mwu-section mwu-section-tools">
-                <div class="mwu-section-head">
-                    <span>⚡</span>
-                    <div><b>Thao tác</b><small>Chỉ dùng khi cần can thiệp thủ công</small></div>
-                </div>
-                <div class="mwu-buttons">
+            <div class="mwu-section mwu-section-tools mwu-accordion">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="tools_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline"><span>⚡</span><span><b>Thao tác</b><small>Chỉ dùng khi cần can thiệp thủ công</small></span></span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="tools_body" class="mwu-accordion-body" hidden>
+                    <div class="mwu-buttons">
                     <button id="mwu_run" class="menu_button mwu-primary"><i class="fa-solid fa-play"></i> Run agents now</button>
                     <button id="mwu_reset" class="menu_button mwu-danger"><i class="fa-solid fa-rotate-left"></i> Reset current chat state</button>
                 </div>
-                <div class="mwu-note">Reset chỉ xóa state runtime của chat; không xóa lịch sử tin nhắn.</div>
+                    <div class="mwu-note">Reset chỉ xóa state runtime của chat; không xóa lịch sử tin nhắn.</div>
+                </div>
             </div>
 
-            <div class="mwu-section mwu-debug-section">
-                <div class="mwu-section-head">
-                    <span>⌁</span>
-                    <div><b>Developer</b><small>Chỉ bật khi đang kiểm tra lỗi</small></div>
-                </div>
-                <label class="mwu-switch-row compact">
+            <div class="mwu-section mwu-debug-section mwu-accordion">
+                <button class="mwu-accordion-toggle" type="button" data-mwu-target="developer_body" aria-expanded="false">
+                    <span class="mwu-section-head-inline"><span>⌁</span><span><b>Developer</b><small>Chỉ bật khi đang kiểm tra lỗi</small></span></span>
+                    <span class="fa-solid fa-chevron-down mwu-accordion-chevron"></span>
+                </button>
+                <div id="developer_body" class="mwu-accordion-body" hidden>
+                    <label class="mwu-switch-row compact">
                     <span><span class="mwu-label">Debug console</span><small>Ghi log runtime vào DevTools Console.</small></span>
                     <input id="mwu_debug" type="checkbox"><span class="mwu-switch"></span>
-                </label>
+                    </label>
+                </div>
             </div>
 
             <div class="mwu-live-status">
@@ -1001,6 +1015,30 @@ function ui() {
         );
     }
 
+    $(".mwu-accordion-toggle").on("click", function () {
+        const button = $(this);
+        const targetId = button.attr("data-mwu-target");
+        const body = $("#" + targetId);
+        const open = !body.prop("hidden");
+
+        $(".mwu-accordion-body").each(function () {
+            if (this.id !== targetId) {
+                $(this).prop("hidden", true);
+                $(this).closest(".mwu-accordion").find(".mwu-accordion-toggle")
+                    .attr("aria-expanded", "false");
+                $(this).closest(".mwu-accordion").find(".mwu-accordion-chevron")
+                    .removeClass("fa-chevron-up")
+                    .addClass("fa-chevron-down");
+            }
+        });
+
+        body.prop("hidden", open);
+        button.attr("aria-expanded", String(!open));
+        button.find(".mwu-accordion-chevron")
+            .toggleClass("fa-chevron-down", open)
+            .toggleClass("fa-chevron-up", !open);
+    });
+
     $("#mwu_achievements_toggle").on("click", function () {
         const open = !$("#mwu_achievements_list").prop("hidden");
         $("#mwu_achievements_list").prop("hidden", open);
@@ -1072,7 +1110,7 @@ function init() {
         e.on(t2.CHAT_CHANGED, clear);
     }
 
-    console.log("[MWU] v0.4.0 loaded");
+    console.log("[MWU] v0.4.1 loaded");
 }
 
 setTimeout(init, 0);
