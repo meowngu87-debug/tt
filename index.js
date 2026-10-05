@@ -1179,7 +1179,7 @@ function ui() {
     $("#mwu_facts").val(s.maxFacts);
     $("#mwu_entities").val(s.maxVisibleEntities);
     $("#mwu_visible").val(s.maxVisibleItems);
-"");    $("#mwu_debug").prop("checked", s.debug);
+    $("#mwu_debug").prop("checked", s.debug);
 
     function bind(id, k, cast = v => v) {
         $(id).on("change", function () {
@@ -1198,7 +1198,7 @@ function ui() {
     bind("#mwu_facts", "maxFacts", Number);
     bind("#mwu_entities", "maxVisibleEntities", Number);
     bind("#mwu_visible", "maxVisibleItems", Number);
-"");    bind("#mwu_debug", "debug");
+    bind("#mwu_debug", "debug");
 
     $("#mwu_user_profile").on("change", function () {
         bag().userProfile = String($(this).val() || "");
